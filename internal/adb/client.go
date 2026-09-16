@@ -153,9 +153,11 @@ func (c *Client) Slim(serial string, aggressive bool, keepPackages []string) (in
 	c.Exec("-s", serial, "shell", "settings", "put", "global", "window_animation_scale", "0")
 	c.Exec("-s", serial, "shell", "settings", "put", "global", "transition_animation_scale", "0")
 	c.Exec("-s", serial, "shell", "settings", "put", "global", "animator_duration_scale", "0")
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "background_process_limit", "2")
+	c.Exec("-s", serial, "shell", "settings", "put", "global", "background_process_limit", "4")
 	c.Exec("-s", serial, "shell", "settings", "put", "global", "auto_sync", "0")
 	c.Exec("-s", serial, "shell", "settings", "put", "secure", "location_mode", "0")
+	c.Exec("-s", serial, "shell", "settings", "put", "secure", "user_setup_complete", "1")
+	c.Exec("-s", serial, "shell", "settings", "put", "global", "device_provisioned", "1")
 
 	// Trim memory
 	c.Exec("-s", serial, "shell", "am", "kill-all")

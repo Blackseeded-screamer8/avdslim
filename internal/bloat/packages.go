@@ -68,7 +68,8 @@ var AggressiveBloatPackages = []string{
 }
 
 func PrintProfiles() {
-	fmt.Println("📋 AVD-SLIM Slimming Categories & Packages:\n")
+	fmt.Println("📋 AVD-SLIM Slimming Categories & Packages:")
+	fmt.Println()
 
 	for category, pkgs := range StandardBloatCategories {
 		fmt.Printf("📦 %s:\n", category)

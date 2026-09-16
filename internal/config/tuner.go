@@ -139,7 +139,15 @@ func TuneAvd(targetAvd string, ramMb, heapMb int, gpuMode string) error {
 	fmt.Printf("   • VM Heap: %d MB\n", heapMb)
 	fmt.Println("   • Hardware Audio & Camera: disabled (saves host threads/buffers)")
 	fmt.Printf("   • GPU Mode: %s (%s)\n", gpuMode, GetGpuBackendDescription(gpuMode))
-	fmt.Println("   • Runtime cache & snapshots: purged (prevents restoring stale 4GB/lavapipe states)\n")
+	fmt.Println("   • Runtime cache & snapshots: purged (prevents restoring stale 4GB/lavapipe states)")
+	fmt.Println()
 	fmt.Printf("ℹ️  Note: If this emulator is currently running, restart it to apply changes:\n   avdslim restart %s\n\n", avdName)
 	return nil
+}
+
+func HasGoldenSnapshot(avdName string) bool {
+	avdBase := GetAvdBaseDir()
+	snapDir := filepath.Join(avdBase, avdName+".avd", "snapshots", "avdslim_clean")
+	info, err := os.Stat(snapDir)
+	return err == nil && info.IsDir()
 }

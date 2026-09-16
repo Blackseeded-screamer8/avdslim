@@ -58,7 +58,7 @@ Just like `simslim` silences iOS simulators via `launchctl`, `avdslim`:
    - **Windows 10 / 11**: Direct3D 11 via ANGLE or native Desktop OpenGL / Vulkan.
 3. **Disables 24+ Bloat Daemons**: Silences non-essential Google background services via `pm disable-user --user 0`.
 4. **Eliminates Animation Lag**: Sets window, transition, and animator scales to 0x.
-5. **Limits Background Churn**: Caps `background_process_limit = 2` and disables auto-sync.
+5. **Limits Background Churn**: Caps `background_process_limit = 4` (protecting OAuth and biometrics) and disables auto-sync.
 6. **Drops Caches**: Flushes Linux page caches and compacts memory heaps.
 
 ---
@@ -111,7 +111,39 @@ make install
 
 ## 🛠️ Usage & Workflows
 
-### 1. Zero-Friction Watch Mode (`watch`)
+### 1. Android Studio 1-Click Integration (`install-shim`)
+Prefer clicking the green **"Play"** button in Android Studio? Wrap the SDK emulator binary once:
+```bash
+avdslim install-shim
+```
+* **Zero workflow changes**: Android Studio launches automatically stay slimmed (1536 MB, `-lowram`, Metal GPU).
+* **Safe & reversible anytime**: `avdslim uninstall-shim` restores the original SDK binary instantly.
+
+---
+
+### 2. Live Efficiency Benchmark (`bench`)
+Print a live before/after scoreboard comparing stock flagship consumption against your running slimmed AVD:
+```bash
+avdslim bench
+```
+
+---
+
+### 3. Golden Snapshot: ~1.5-Second Instant Boot (`bake`)
+Cold booting Android emulators typically takes 35–60 seconds. `avdslim bake` cold boots your emulator once, applies all bloat pruning and memory optimizations, and saves an immutable `avdslim_clean` snapshot:
+```bash
+avdslim bake
+# Or specify AVD name or index:
+avdslim bake Pixel_10_Pro
+# Headless baking (for CI or background):
+avdslim bake 1 --headless
+```
+* **~1.5s instant restore**: Subsequent launches (`avdslim start` or Android Studio via shim) restore from the clean snapshot in < 2 seconds.
+* **Ephemeral safety (`-no-snapshot-save`)**: Dev sessions never pollute the snapshot. Every reboot starts 100% clean and slimmed.
+
+---
+
+### 4. Zero-Friction Watch Mode (`watch`)
 Don't want to change your workflow? Run `avdslim watch` in the background. Whenever you launch an emulator from Android Studio or VS Code, `avdslim` detects it and automatically silences bloat as soon as it boots:
 ```bash
 avdslim watch
@@ -120,7 +152,7 @@ avdslim watch
 
 ---
 
-### 2. Instant Undo / Restore (`restore`)
+### 5. Instant Undo / Restore (`restore`, `off`)
 Need to verify a bug with 100% stock Google services? One command immediately re-enables all disabled packages, restores animations to 1.0x, and resets background limits:
 ```bash
 avdslim restore
@@ -130,7 +162,7 @@ avdslim off
 
 ---
 
-### 3. Slim an Active Emulator (`on`)
+### 6. Slim an Active Emulator (`on`)
 Immediately silences background bloat and trims memory on a running emulator:
 ```bash
 # Standard preset (safe for all apps):
@@ -145,7 +177,7 @@ avdslim on --keep=com.google.android.apps.maps
 
 ---
 
-### 4. Deep Memory Breakdown (`measure`)
+### 7. Deep Memory Breakdown (`measure`)
 Inspect host macOS memory (`phys_footprint`, resident RSS) alongside the guest Android `dumpsys meminfo`:
 ```bash
 avdslim measure
@@ -155,7 +187,7 @@ avdslim measure emulator-5554
 
 ---
 
-### 5. Tune Host AVD Configuration (`tune-avd`)
+### 8. Tune Host AVD Configuration (`tune-avd`)
 Configures an AVD's `config.ini` for optimal memory consumption and purges stale snapshots:
 ```bash
 avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
@@ -167,7 +199,7 @@ avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
 
 ---
 
-### 6. Restart Emulator with Clean Cache (`restart`)
+### 9. Restart Emulator with Clean Cache (`restart`)
 Gracefully shuts down the emulator, purges stale runtime snapshots, and relaunches with low-memory host flags:
 ```bash
 avdslim restart emulator-5554 --ram=1536
@@ -175,23 +207,42 @@ avdslim restart emulator-5554 --ram=1536
 
 ---
 
-### 7. Launch Emulator (`launch`)
-Starts an AVD with `-lowram -gpu host -no-snapshot-load` and automatically slims upon boot:
+### 10. Start / Launch Emulator (`start`, `run`, `launch`)
+Starts an AVD with low-memory host flags and auto-slims upon boot. If a Golden Snapshot exists, it boots in **<1.5s** automatically:
 ```bash
-avdslim launch Pixel_10_Pro --slim --ram=1536
+# Interactive numbered menu (press 1, 2, or hit Enter for default)
+avdslim start
+
+# Select directly by index number
+avdslim start 1
+
+# Multi-window / split-screen testing (disables -lowram kernel flag)
+avdslim start 1 --no-lowram
+
+# Headless mode (for CI runners or automated testing)
+avdslim start 1 --headless
+
+# Force a cold boot without loading snapshot
+avdslim start 1 --cold
+
+# Custom RAM allocation
+avdslim run Pixel_10_Pro --ram=1024
+
+# Skip auto-slimming if you need stock services untouched
+avdslim start 1 --no-slim
 ```
 
 ---
 
-### 8. Environment Doctor (`doctor`)
-Audits your Android toolchain, active AVDs, 16K page size overhead, and warns about software GPU fallback:
+### 11. Environment Doctor (`doctor`)
+Audits your Android toolchain, active AVDs, Golden Snapshots, 16K page size overhead, and warns about software GPU fallback:
 ```bash
 avdslim doctor
 ```
 
 ---
 
-### 9. View Bloat Profiles (`profiles`)
+### 12. View Bloat Profiles (`profiles`)
 Inspects the list of disabled packages categorized by function (Assistant, Telephony, Consumer Bloat, etc.) and guaranteed core services:
 ```bash
 avdslim profiles
@@ -199,7 +250,19 @@ avdslim profiles
 
 ---
 
+## ☁️ GitHub Actions CI Integration
 
+Slash CI runner memory and run parallel emulator shards on free GitHub Actions runners:
+
+```yaml
+- name: Setup AVD-SLIM
+  uses: kdbhalala/avdslim@main
+  with:
+    ram: '1536'
+    install-shim: 'true'
+```
+
+---
 
 ## 📜 License
 

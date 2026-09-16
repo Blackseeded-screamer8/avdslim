@@ -8,10 +8,12 @@ import (
 	"github.com/krunalbhalala/avdslim/internal/adb"
 	"github.com/krunalbhalala/avdslim/internal/config"
 	"github.com/krunalbhalala/avdslim/internal/host"
+	"github.com/krunalbhalala/avdslim/internal/shim"
 )
 
 func RunDoctor(client *adb.Client) {
-	fmt.Println("🩺 Running AVD-SLIM Doctor Diagnostics...\n")
+	fmt.Println("🩺 Running AVD-SLIM Doctor Diagnostics...")
+	fmt.Println()
 
 	issuesCount := 0
 
@@ -49,11 +51,19 @@ func RunDoctor(client *adb.Client) {
 		fmt.Printf("   ✓ Emulator: %s (%s)\n", emuPath, strings.TrimSpace(firstLine))
 	}
 
+	shimActive, _ := shim.IsShimInstalled()
+	if shimActive {
+		fmt.Println("   ✓ Android Studio Shim: Active (GUI launches are automatically slimmed)")
+	} else {
+		fmt.Println("   ℹ️  Android Studio Shim: Not installed (run `avdslim install-shim` to auto-slim Studio launches)")
+	}
+
 	sdkDir := config.GetAndroidSdkDir()
 	if sdkDir != "" {
 		fmt.Printf("   ✓ Android SDK: %s\n\n", sdkDir)
 	} else {
-		fmt.Println("   ⚠️  Android SDK directory not found ($ANDROID_HOME not set)\n")
+		fmt.Println("   ⚠️  Android SDK directory not found ($ANDROID_HOME not set)")
+		fmt.Println()
 	}
 
 	// 2. Installed AVD Configurations Audit
@@ -96,6 +106,13 @@ func RunDoctor(client *adb.Client) {
 				fmt.Printf("     ⚠️  GPU Mode is %q (Recommend: `host` for native hardware acceleration)\n", gpu)
 				issuesCount++
 			}
+
+			// Check Golden Snapshot
+			if config.HasGoldenSnapshot(name) {
+				fmt.Println("     ✨ Golden Snapshot: Baked ('avdslim_clean' ~1.5s instant boot ready)")
+			} else {
+				fmt.Printf("     ℹ️  Golden Snapshot: None (Run `avdslim bake %s` for ~1.5s instant boot)\n", name)
+			}
 		}
 		fmt.Println()
 	}
@@ -104,7 +121,8 @@ func RunDoctor(client *adb.Client) {
 	fmt.Println("📱 3. Running Emulator Diagnostics:")
 	running, _ := client.GetRunningEmulators()
 	if len(running) == 0 {
-		fmt.Println("   ℹ️  No active emulators running right now.\n")
+		fmt.Println("   ℹ️  No active emulators running right now.")
+		fmt.Println()
 	} else {
 		for _, emu := range running {
 			hostPid := host.FindHostPidForSerial(emu.Serial)
@@ -155,5 +173,6 @@ func RunDoctor(client *adb.Client) {
 		fmt.Printf("ℹ️  Doctor found %d recommendation(s) to reduce memory overhead.\n", issuesCount)
 		fmt.Println("   Run `avdslim tune-avd <name>` and `avdslim restart` to apply recommendations.")
 	}
-	fmt.Println("══════════════════════════════════════════════════════════════\n")
+	fmt.Println("══════════════════════════════════════════════════════════════")
+	fmt.Println()
 }
