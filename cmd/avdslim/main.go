@@ -12,15 +12,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/krunalbhalala/avdslim/internal/adb"
-	"github.com/krunalbhalala/avdslim/internal/bloat"
-	"github.com/krunalbhalala/avdslim/internal/config"
-	"github.com/krunalbhalala/avdslim/internal/doctor"
-	"github.com/krunalbhalala/avdslim/internal/host"
-	"github.com/krunalbhalala/avdslim/internal/shim"
+	"github.com/kdbhalala/avdslim/internal/adb"
+	"github.com/kdbhalala/avdslim/internal/bloat"
+	"github.com/kdbhalala/avdslim/internal/config"
+	"github.com/kdbhalala/avdslim/internal/doctor"
+	"github.com/kdbhalala/avdslim/internal/host"
+	"github.com/kdbhalala/avdslim/internal/shim"
 )
 
-const version = "1.0.5"
+// var, not const: release.yml sets it via -ldflags "-X main.version=...".
+var version = "1.0.5"
 
 func main() {
 	if len(os.Args) < 2 {

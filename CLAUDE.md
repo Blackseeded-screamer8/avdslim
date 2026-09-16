@@ -14,8 +14,8 @@ snapshot for ~1.5 s boots.
   guest `/data/local/tmp/avdslim_state.json`. No DB, no tests exist.
 - Verify: `make build`, `go vet ./...`, `gofmt -l .`; `go test ./...` is vacuous.
   `avdslim doctor` / `on` / `off` need a live emulator.
-- Gotcha: go.mod module is `github.com/krunalbhalala/avdslim`, remote is
-  `kdbhalala/avdslim` — don't "fix" imports.
+- Module path `github.com/kdbhalala/avdslim` must match the remote, or
+  `go install` breaks.
 
 Read first:
 

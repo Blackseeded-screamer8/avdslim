@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/krunalbhalala/avdslim/internal/config"
+	"github.com/kdbhalala/avdslim/internal/config"
 )
 
 const shimHeader = "# avdslim emulator shim"

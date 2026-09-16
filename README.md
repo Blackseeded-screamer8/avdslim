@@ -1,4 +1,4 @@
-# ⚡ AVD-SLIM
+# ⚡ AVD-SLIM™
 
 > **Android Emulator RAM & CPU Optimizer**  
 > *Inspired by [MobAI-App/simslim](https://github.com/MobAI-App/simslim) for iOS simulators.*
@@ -101,6 +101,12 @@ curl -fsSL https://raw.githubusercontent.com/kdbhalala/avdslim/main/install.sh |
 brew tap kdbhalala/avdslim https://github.com/kdbhalala/avdslim.git
 brew install avdslim
 ```
+
+> **Official builds only** come from the channels listed in [TRADEMARKS.md](TRADEMARKS.md#official-channels). To verify a downloaded release:
+> ```bash
+> shasum -a 256 -c checksums.txt --ignore-missing
+> gh attestation verify avdslim_<version>_<os>_<arch>.tar.gz --repo kdbhalala/avdslim
+> ```
 
 ### Option 3: Go Install
 ```bash
@@ -320,3 +326,5 @@ Slash CI runner memory and run parallel emulator shards on free GitHub Actions r
 ## 📜 License
 
 MIT License. See [LICENSE](LICENSE) for details.
+
+The AVD-SLIM™ and avdslim™ names are not covered by MIT. Official channels and naming rules for forks are in [TRADEMARKS.md](TRADEMARKS.md).

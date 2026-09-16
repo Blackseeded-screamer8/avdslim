@@ -5,10 +5,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/krunalbhalala/avdslim/internal/adb"
-	"github.com/krunalbhalala/avdslim/internal/config"
-	"github.com/krunalbhalala/avdslim/internal/host"
-	"github.com/krunalbhalala/avdslim/internal/shim"
+	"github.com/kdbhalala/avdslim/internal/adb"
+	"github.com/kdbhalala/avdslim/internal/config"
+	"github.com/kdbhalala/avdslim/internal/host"
+	"github.com/kdbhalala/avdslim/internal/shim"
 )
 
 func RunDoctor(client *adb.Client) {

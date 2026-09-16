@@ -1,3 +1,3 @@
-module github.com/krunalbhalala/avdslim
+module github.com/kdbhalala/avdslim
 
 go 1.22

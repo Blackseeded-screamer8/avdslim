@@ -29,8 +29,7 @@ manual, nothing syncs them.
 
 `install.sh` (pinned `VERSION`, darwin/linux only — no Windows branch),
 Homebrew tap (`brew tap kdbhalala/avdslim`), `go install
-github.com/kdbhalala/avdslim/cmd/avdslim@latest` (note: go.mod module path is
-`github.com/krunalbhalala/avdslim`), GitHub Action (`action.yml`:
+github.com/kdbhalala/avdslim/cmd/avdslim@latest` (module path matches the remote), GitHub Action (`action.yml`:
 installs binary, `install-shim`, optional `watch` daemon).
 
 ## Known failure modes

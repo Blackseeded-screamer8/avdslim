@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/krunalbhalala/avdslim/internal/bloat"
-	"github.com/krunalbhalala/avdslim/internal/config"
+	"github.com/kdbhalala/avdslim/internal/bloat"
+	"github.com/kdbhalala/avdslim/internal/config"
 )
 
 const StateFilePath = "/data/local/tmp/avdslim_state.json"

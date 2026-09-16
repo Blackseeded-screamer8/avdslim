@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   goreleaser:
@@ -52,6 +54,11 @@ jobs:
           cd dist
           shasum -a 256 *.tar.gz > checksums.txt
           cat checksums.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dist/*.tar.gz'
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
