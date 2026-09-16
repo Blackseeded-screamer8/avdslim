@@ -230,6 +230,18 @@ avdslim on --skip=animations,sync
 | `location` | `location_mode` (otherwise off) |
 | `setup` | `user_setup_complete`, `device_provisioned` (otherwise marked done) |
 
+#### Your own defaults
+Put flags you always want in a defaults file. They apply to `on`, `watch`, `tune-avd`, `start`, `bake`, `snapshot` and `install-shim`; flags typed on the command line win. Lines starting with `#` are comments.
+
+* macOS: `~/Library/Application Support/avdslim/defaults`
+* Linux: `~/.config/avdslim/defaults`
+
+```
+# e.g.
+--ram=2048 --skip=animations --keep=com.google.android.apps.maps
+```
+The Android Studio shim reads `--ram` from this file at every launch, so changing it needs no reinstall. `avdslim doctor` shows the file it found.
+
 ---
 
 ### 9. Deep Memory Breakdown (`measure`)

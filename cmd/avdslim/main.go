@@ -31,7 +31,7 @@ func main() {
 	}
 
 	cmd := strings.ToLower(os.Args[1])
-	subArgs := os.Args[2:]
+	subArgs := withDefaults(cmd, os.Args[2:])
 	client := adb.NewClient()
 
 	switch cmd {
@@ -78,6 +78,41 @@ func main() {
 		printUsage()
 		os.Exit(1)
 	}
+}
+
+// flagCommands are the commands whose flags the defaults file may set.
+var flagCommands = map[string]bool{
+	"on": true, "slim": true, "watch": true, "tune-avd": true, "tune": true,
+	"launch": true, "start": true, "run": true, "bake": true,
+	"snapshot": true, "snap": true, "install-shim": true, "shim": true,
+}
+
+// knownDefaultFlags are the flags accepted in the defaults file.
+var knownDefaultFlags = []string{
+	"--ram=", "--heap=", "--gpu=", "--keep=", "--skip=",
+	"--aggressive", "--headless", "--no-lowram", "--no-slim",
+}
+
+// withDefaults puts the defaults file's flags before args, so flags typed on the
+// command line are parsed later and win. Commands ignore flags they don't use.
+func withDefaults(cmd string, args []string) []string {
+	if !flagCommands[cmd] {
+		return args
+	}
+	defaults := config.LoadDefaults()
+	for _, d := range defaults {
+		known := false
+		for _, k := range knownDefaultFlags {
+			if d == k || (strings.HasSuffix(k, "=") && strings.HasPrefix(d, k)) {
+				known = true
+				break
+			}
+		}
+		if !known {
+			fmt.Fprintf(os.Stderr, "⚠️  Ignoring unknown flag %q in %s\n", d, config.DefaultsFilePath())
+		}
+	}
+	return append(defaults, args...)
 }
 
 // addSkip records a --skip=a,b flag, exiting on an unknown group so typos are not silently ignored.
@@ -142,7 +177,13 @@ Examples:
   avdslim on --skip=animations,sync
   avdslim tune-avd Pixel_10_Pro --ram=1024
   avdslim restart
-`, version)
+
+Defaults:
+  Put flags in %s to apply them to
+  on, watch, tune-avd, start, bake, snapshot and install-shim. Flags typed on
+  the command line win. Example file contents:
+    --ram=2048 --skip=animations --keep=com.google.android.apps.maps
+`, version, config.DefaultsFilePath())
 }
 
 func handleList(client *adb.Client) {
@@ -832,6 +873,7 @@ func handleInstallShim(args []string) {
 	fmt.Println("✅ Successfully installed emulator shim!")
 	fmt.Println("   • From now on, launching emulators via Android Studio 'Play' button")
 	fmt.Printf("     will automatically inject -memory %d -lowram -no-audio flags.\n", ramMb)
+	fmt.Printf("   • A --ram=<MB> line in %s overrides this at launch.\n", config.DefaultsFilePath())
 	fmt.Println("   • To restore stock Android Studio emulator behavior anytime:")
 	fmt.Println("     avdslim uninstall-shim")
 	fmt.Println()

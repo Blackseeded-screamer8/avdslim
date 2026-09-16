@@ -167,6 +167,7 @@ if !NO_SLIM! EQU 0 (
 "!REAL_EMU!" !EXTRA! %%*
 `, shimHeader, defaultRam)
 	} else {
+		// ponytail: --ram in the defaults file wins at launch, so changing it needs no reinstall.
 		script = fmt.Sprintf(`#!/bin/bash
 %s — transparently injects low-memory flags
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -185,6 +186,13 @@ HEADLESS=0
 HAS_SNAP=0
 AVD_NAME=""
 
+DEFAULTS_FILE=%s
+RAM=%d
+if [ -f "$DEFAULTS_FILE" ]; then
+    FILE_RAM=$(sed 's/#.*//' "$DEFAULTS_FILE" | grep -oE -- '--ram=[0-9]+' | tail -n 1 | cut -d= -f2)
+    if [ -n "$FILE_RAM" ]; then RAM="$FILE_RAM"; fi
+fi
+
 PREV=""
 for arg in "$@"; do
     if [ "$arg" = "-memory" ]; then HAS_MEM=1; fi
@@ -200,7 +208,7 @@ done
 EXTRA=()
 if [ "$NO_SLIM" -ne 1 ]; then
     if [ "$HAS_MEM" -eq 0 ]; then
-        EXTRA+=("-memory" "%d")
+        EXTRA+=("-memory" "$RAM")
     fi
     if [ "$HAS_LOWRAM" -eq 0 ] && [ "$NO_LOWRAM" -eq 0 ]; then
         EXTRA+=("-lowram")
@@ -218,11 +226,16 @@ if [ "$NO_SLIM" -ne 1 ]; then
 fi
 
 exec "$REAL_EMU" "${EXTRA[@]}" "$@"
-`, shimHeader, defaultRam)
+`, shimHeader, shellQuote(config.DefaultsFilePath()), defaultRam)
 	}
 
 	if err := os.WriteFile(emuPath, []byte(script), 0755); err != nil {
 		return err
 	}
 	return os.Chmod(emuPath, 0755)
+}
+
+// shellQuote single-quotes s for bash.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

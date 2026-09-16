@@ -30,6 +30,12 @@ guest, or live emulator flags.
   `StandardBloatCategories map[string][]string` (~35 pkgs), `AggressiveBloatPackages`
   (5 pkgs: Play Store updater, Chrome, setup wizards). Not user-editable
   except per-invocation `--keep=<pkg>`.
+- **User defaults** — `os.UserConfigDir()/avdslim/defaults` (macOS
+  `~/Library/Application Support/avdslim/defaults`, Linux
+  `~/.config/avdslim/defaults`): whitespace-separated flags, `#` comments.
+  Prepended to args of `on`/`watch`/`tune-avd`/`start`/`bake`/`snapshot`/
+  `install-shim` (CLI flags win). The shim reads `--ram` from it at launch.
+  Owner: `internal/config/defaults.go`.
 - **Shim marker** — SDK `emulator/` dir holds either stock binary or
   (`emulator.real` binary + `emulator` shell/batch script containing
   `# avdslim emulator shim`). `IsShimInstalled` checks both.

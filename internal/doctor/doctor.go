@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -56,6 +57,14 @@ func RunDoctor(client *adb.Client) {
 		fmt.Println("   ✓ Android Studio Shim: Active (GUI launches are automatically slimmed)")
 	} else {
 		fmt.Println("   ℹ️  Android Studio Shim: Not installed (run `avdslim install-shim` to auto-slim Studio launches)")
+	}
+
+	if path := config.DefaultsFilePath(); path != "" {
+		if _, err := os.Stat(path); err == nil {
+			fmt.Printf("   ✓ Defaults file: %s (%s)\n", path, strings.Join(config.LoadDefaults(), " "))
+		} else {
+			fmt.Printf("   ℹ️  Defaults file: none (optional: %s)\n", path)
+		}
 	}
 
 	sdkDir := config.GetAndroidSdkDir()
