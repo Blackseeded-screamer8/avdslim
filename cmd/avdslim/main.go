@@ -20,7 +20,7 @@ import (
 	"github.com/krunalbhalala/avdslim/internal/shim"
 )
 
-const version = "1.0.2"
+const version = "1.0.3"
 
 func main() {
 	if len(os.Args) < 2 {
