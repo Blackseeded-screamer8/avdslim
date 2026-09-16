@@ -43,6 +43,8 @@ func main() {
 		handleTuneAvd(subArgs)
 	case "launch":
 		handleLaunch(client, subArgs)
+	case "restart":
+		handleRestart(client, subArgs)
 	default:
 		fmt.Printf("❌ Unknown command: %s\n\n", cmd)
 		printUsage()
@@ -60,25 +62,26 @@ Usage:
   avdslim <command> [arguments]
 
 Commands:
-  list                 List running emulators (with host RAM) & saved AVDs
-  measure [device]     Deep memory breakdown (host QEMU RSS + guest dumpsys)
+  list                 List running emulators (with Activity Monitor memory) & saved AVDs
+  measure [device]     Deep memory breakdown (host Footprint/RSS + guest dumpsys)
   on [device]          Slim down emulator: disable bloat daemons & trim RAM
                        Options: --aggressive (also disables Play Store updater)
   off [device]         Restore disabled packages and default settings
-  tune-avd [avd_name]  Tune host AVD config.ini (RAM=1536M, no cameras, host GPU)
+  tune-avd [avd_name]  Tune host AVD config.ini (RAM=1536M, Metal GPU, no cameras)
                        Options: --ram=<MB> (default: 1536), --heap=<MB> (default: 256)
-  launch <avd_name>    Launch AVD with low-memory host flags (-no-audio, etc.)
+  launch <avd_name>    Launch AVD with low-memory host flags (-lowram, -memory, etc.)
                        Options: --slim (auto-slim once booted), --ram=<MB>
+  restart [device]     Gracefully restart emulator with clean cache, low-memory flags
+                       Options: --ram=<MB> (default: 1536)
   version              Print avdslim version
 
 Examples:
   avdslim list
   avdslim measure
-  avdslim on
-  avdslim on emulator-5554 --aggressive
-  avdslim off
-  avdslim tune-avd Pixel_8_API_34 --ram=1536
-  avdslim launch Pixel_8_API_34 --slim
+  avdslim on --aggressive
+  avdslim tune-avd Pixel_10_Pro --ram=1536
+  avdslim restart emulator-5554
+  avdslim launch Pixel_10_Pro --slim --ram=1536
 `, version)
 }
 
@@ -93,21 +96,23 @@ func handleList(client *adb.Client) {
 		fmt.Printf("\n📱 Running Emulators (%d):\n", len(running))
 		for _, emu := range running {
 			hostPid := host.FindHostPidForSerial(emu.Serial)
+			hostFootprintMb := 0
 			hostRssMb := 0
 			if hostPid > 0 {
+				hostFootprintMb = host.GetHostFootprintMb(hostPid)
 				hostRssMb = host.GetHostRssMb(hostPid)
 			}
 
-			hostRamStr := "unknown"
-			if hostRssMb > 0 {
-				hostRamStr = fmt.Sprintf("%d MB", hostRssMb)
-			}
 			statusStr := "🔴 FULL (Stock)"
 			if emu.IsSlimmed {
 				statusStr = "⚡ SLIMMED"
 			}
 			fmt.Printf("  • %s (%s, Android %s, API %s)\n", emu.Serial, emu.Model, emu.AndroidVersion, emu.ApiLevel)
-			fmt.Printf("    Host PID: %d | Host RAM (RSS): %s | Status: %s\n", hostPid, hostRamStr, statusStr)
+			if hostFootprintMb > 0 {
+				fmt.Printf("    Host PID: %d | Activity Monitor: %d MB | RSS: %d MB | Status: %s\n", hostPid, hostFootprintMb, hostRssMb, statusStr)
+			} else {
+				fmt.Printf("    Host PID: %d | Status: %s\n", hostPid, statusStr)
+			}
 		}
 		fmt.Println()
 	}
@@ -147,10 +152,12 @@ func handleMeasure(client *adb.Client, args []string) {
 
 	hostPid := host.FindHostPidForSerial(serial)
 	if hostPid > 0 {
+		footprint := host.GetHostFootprintMb(hostPid)
 		rss := host.GetHostRssMb(hostPid)
 		fmt.Println("🖥️  HOST (macOS) Footprint:")
 		fmt.Printf("   QEMU / Emulator PID: %d\n", hostPid)
-		fmt.Printf("   Host Resident RAM (RSS): %d MB\n\n", rss)
+		fmt.Printf("   Activity Monitor Memory (Footprint): %d MB\n", footprint)
+		fmt.Printf("   Resident Physical RAM (RSS): %d MB\n\n", rss)
 	}
 
 	out, _ := client.Exec("-s", serial, "shell", "dumpsys", "meminfo")
@@ -181,8 +188,10 @@ func handleOn(client *adb.Client, args []string) {
 	fmt.Printf("⚡ Slimming Android Emulator (%s) [preset: %s]...\n\n", serial, presetName)
 
 	hostPid := host.FindHostPidForSerial(serial)
+	beforeFootprint := 0
 	beforeRss := 0
 	if hostPid > 0 {
+		beforeFootprint = host.GetHostFootprintMb(hostPid)
 		beforeRss = host.GetHostRssMb(hostPid)
 	}
 
@@ -195,19 +204,26 @@ func handleOn(client *adb.Client, args []string) {
 
 	time.Sleep(1 * time.Second)
 
+	afterFootprint := 0
 	afterRss := 0
 	if hostPid > 0 {
+		afterFootprint = host.GetHostFootprintMb(hostPid)
 		afterRss = host.GetHostRssMb(hostPid)
 	}
 
 	fmt.Println("══════════════════════════════════════════════════════════════")
 	fmt.Printf("🎉 Slimming complete for %s!\n", serial)
-	if beforeRss > 0 && afterRss > 0 {
-		diff := beforeRss - afterRss
-		if diff < 0 {
-			diff = 0
+	if beforeFootprint > 0 && afterFootprint > 0 {
+		diffFp := beforeFootprint - afterFootprint
+		if diffFp < 0 {
+			diffFp = 0
 		}
-		fmt.Printf("🖥️  Host RAM (RSS): %dMB -> %dMB (Reclaimed: %dMB)\n", beforeRss, afterRss, diff)
+		diffRss := beforeRss - afterRss
+		if diffRss < 0 {
+			diffRss = 0
+		}
+		fmt.Printf("🖥️  Activity Monitor Memory: %dMB -> %dMB (Reclaimed: %dMB)\n", beforeFootprint, afterFootprint, diffFp)
+		fmt.Printf("🖥️  Host Resident RAM (RSS): %dMB -> %dMB (Reclaimed: %dMB)\n", beforeRss, afterRss, diffRss)
 	}
 	fmt.Printf("ℹ️  To restore default stock services anytime:\n   avdslim off %s\n\n", serial)
 }
@@ -275,12 +291,14 @@ func handleLaunch(client *adb.Client, args []string) {
 	emulator := findEmulator()
 	emuArgs := []string{
 		"-avd", avdName,
+		"-lowram",
 		"-memory", strconv.Itoa(ramMb),
 		"-no-audio",
 		"-camera-back", "none",
 		"-camera-front", "none",
 		"-gpu", "host",
 		"-no-boot-anim",
+		"-no-snapshot-load",
 	}
 
 	fmt.Printf("🚀 Launching emulator %q with low-memory host flags:\n", avdName)
@@ -315,6 +333,58 @@ func handleLaunch(client *adb.Client, args []string) {
 			fmt.Println("⚠️  Boot timed out after 120s. You can run `avdslim on` manually.")
 		}
 	}
+}
+
+func handleRestart(client *adb.Client, args []string) {
+	serial, err := client.ResolveDevice(args)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		return
+	}
+
+	avdNameOut, _ := client.Exec("-s", serial, "emu", "avd", "name")
+	lines := strings.Split(strings.TrimSpace(avdNameOut), "\n")
+	avdName := ""
+	if len(lines) > 0 {
+		avdName = strings.TrimSpace(lines[0])
+	}
+	if avdName == "" || strings.Contains(avdName, "KO:") {
+		installed := config.GetInstalledAvds()
+		if len(installed) == 1 {
+			avdName = installed[0]["name"]
+		}
+	}
+	if avdName == "" {
+		fmt.Println("❌ Could not determine AVD name for running emulator.")
+		return
+	}
+
+	fmt.Printf("🔄 Gracefully shutting down %s (%s)...\n", serial, avdName)
+	client.Exec("-s", serial, "emu", "kill")
+
+	for i := 0; i < 10; i++ {
+		time.Sleep(1 * time.Second)
+		if pid := host.FindHostPidForSerial(serial); pid == 0 {
+			break
+		}
+	}
+	fmt.Println("✓ Emulator process stopped.")
+
+	// Purge stale runtime cache & snapshots
+	home, _ := os.UserHomeDir()
+	avdDir := filepath.Join(home, ".android", "avd", avdName+".avd")
+	_ = os.Remove(filepath.Join(avdDir, "hardware-qemu.ini"))
+	_ = os.Remove(filepath.Join(avdDir, "hardware-qemu.ini.lock"))
+	_ = os.RemoveAll(filepath.Join(avdDir, "snapshots"))
+	fmt.Println("✓ Purged stale hardware-qemu.ini and snapshots.")
+
+	launchArgs := []string{avdName, "--slim"}
+	for _, a := range args {
+		if strings.HasPrefix(a, "--ram=") {
+			launchArgs = append(launchArgs, a)
+		}
+	}
+	handleLaunch(client, launchArgs)
 }
 
 func findEmulator() string {

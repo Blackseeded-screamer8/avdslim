@@ -114,6 +114,8 @@ func TuneAvd(targetAvd string, ramMb, heapMb int) error {
 	kv["hw.gpu.mode"] = "host"
 	kv["hw.gpu.enabled"] = "yes"
 	kv["hw.dPad"] = "no"
+	kv["fastboot.forceColdBoot"] = "yes"
+	kv["fastboot.forceFastBoot"] = "no"
 
 	var sb strings.Builder
 	for k, v := range kv {
@@ -124,10 +126,18 @@ func TuneAvd(targetAvd string, ramMb, heapMb int) error {
 		return err
 	}
 
+	// Purge stale runtime ini and snapshots to prevent restoring previous 4GB/lavapipe states
+	avdDir := filepath.Dir(fileToTune)
+	_ = os.Remove(filepath.Join(avdDir, "hardware-qemu.ini"))
+	_ = os.Remove(filepath.Join(avdDir, "hardware-qemu.ini.lock"))
+	_ = os.RemoveAll(filepath.Join(avdDir, "snapshots"))
+
 	fmt.Printf("✅ Successfully tuned AVD %q!\n", avdName)
 	fmt.Printf("   • Host RAM allocated: %d MB (prevents host memory pressure)\n", ramMb)
 	fmt.Printf("   • VM Heap: %d MB\n", heapMb)
 	fmt.Println("   • Hardware Audio & Camera: disabled (saves host threads/buffers)")
-	fmt.Println("   • GPU Mode: host (uses Apple Silicon Metal hardware acceleration)\n")
+	fmt.Println("   • GPU Mode: host (uses Apple Silicon Metal hardware acceleration)")
+	fmt.Println("   • Runtime cache & snapshots: purged (prevents restoring stale 4GB/lavapipe states)\n")
+	fmt.Printf("ℹ️  Note: If this emulator is currently running, restart it to apply changes:\n   avdslim restart %s\n\n", avdName)
 	return nil
 }

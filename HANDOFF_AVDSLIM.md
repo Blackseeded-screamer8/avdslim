@@ -66,14 +66,14 @@
 - Executes `am trim-memory --all COMPLETE` and root `drop_caches`.
 - **Result**: Guest Free RAM increased from **636 MB to 2,140 MB (2.14 GB)**.
 
-### Permanent Host Configuration Tuning
-- Edits `~/.android/avd/Pixel_10_Pro.avd/config.ini`:
-  - `hw.ramSize = 1536` (down from 2048/4096 MB).
-  - `vm.heapSize = 256`.
-  - `hw.camera.back = none` & `hw.camera.front = none`.
-  - `hw.audioInput = no` & `hw.audioOutput = no`.
-  - `hw.gpu.mode = host` (Apple Silicon Metal hardware acceleration).
-  - Automatic backup created at `config.ini.bak`.
+### Permanent Host Configuration Tuning & The 8 GB Memory Root Cause
+- **Why was the emulator taking 8 GB of RAM in Activity Monitor?**
+  1. **Metric Discrepancy**: macOS Activity Monitor displays `phys_footprint` (`task_vm_info`), which counts dirty pages + compressed memory pages. The CLI's previous RSS metric only counted active uncompressed pages.
+  2. **Stale Running Process & GPU Lavapipe**: The emulator was running continuously with `hw.gpu.mode = lavapipe` (CPU software Vulkan rasterizer). Lavapipe allocated ~4 GB of software rendering buffers in host RAM on top of the 4 GB guest RAM, peaking at **8,154 MB (8.15 GB)** in Activity Monitor.
+  3. **Android 15/16/17 RAM Enforcement**: For API 34+ and 16 KB Page Size images, Android Emulator's C++ code (`main-common.c`) enforces `minRam = 2560` or `4096MB` and overrides `-memory 1536` with `"Increasing RAM size to 4096MB"`.
+  4. **The `-lowram` Override**: Passing the official emulator flag `-lowram` triggers `minRam = 0` (`"Removing any lower bound of RAM size"`) and activates Android OS low-RAM kernel mode, strictly locking guest RAM to **1,520 MB (1.5 GB)**.
+  5. **Purging Stale Snapshots & Hardware Cache**: QuickBoot snapshots and `hardware-qemu.ini` cached the old 4GB/lavapipe states across boots. `tune-avd` and `restart` now automatically purge stale runtime `.ini` and `snapshots/` files.
+  6. **Result**: Activity Monitor memory footprint plummeted from **8,154 MB (8.15 GB) down to 3,534 MB (3.5 GB)** on Pixel 10 Pro with native Metal hardware GPU acceleration.
 
 ---
 
@@ -82,10 +82,10 @@
 ```bash
 cd /Users/krunalbhalala/Documents/Projects/avdslim
 
-# List running emulators and installed AVD configurations
+# List running emulators with Activity Monitor footprint & RSS
 ./bin/avdslim list
 
-# Measure guest and host memory footprint
+# Measure guest and host memory breakdown
 ./bin/avdslim measure emulator-5554
 
 # Slim down running emulator (standard bloat packages)
@@ -100,6 +100,10 @@ cd /Users/krunalbhalala/Documents/Projects/avdslim
 # Tune an installed AVD config to permanently lock RAM & GPU settings
 ./bin/avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
 
+# Gracefully restart running emulator with clean cache & low-memory flags
+./bin/avdslim restart emulator-5554
+
 # Launch an AVD with low-memory host flags and auto-slim
 ./bin/avdslim launch Pixel_10_Pro --slim --ram=1536
 ```
+

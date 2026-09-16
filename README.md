@@ -72,13 +72,13 @@ Download the binary for your platform from Releases:
 ## 🛠️ Usage & Commands
 
 ### 1. List Emulators & AVDs
-List all running emulators with their host RSS memory consumption and slimmed status:
+List all running emulators with their macOS Activity Monitor memory footprint, RSS, and slimmed status:
 ```bash
 avdslim list
 ```
 
 ### 2. Measure Memory Footprint
-Deep memory profiling showing both host QEMU resident memory and in-guest process breakdown:
+Deep memory profiling showing macOS Activity Monitor memory footprint (`phys_footprint`), uncompressed physical RSS, and in-guest process breakdown:
 ```bash
 avdslim measure
 # Or specify device:
@@ -100,19 +100,26 @@ avdslim off
 ```
 
 ### 5. Tune Host AVD Config (`tune-avd`)
-Directly edits `~/.android/avd/<name>.avd/config.ini` to safe low-memory settings (creates `.bak` first):
+Directly edits `~/.android/avd/<name>.avd/config.ini` to safe low-memory settings, purges stale runtime cache/snapshots (which would otherwise restore 4GB/software-rendering state):
 ```bash
-avdslim tune-avd Pixel_8_API_34 --ram=1536 --heap=256
+avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
 ```
 * Sets `hw.ramSize = 1536` (instead of 2048/4096 MB)
 * Sets `vm.heapSize = 256`
 * Disables audio and camera host emulation threads (`hw.camera.back = none`, `hw.audioInput = no`)
 * Forces Metal GPU hardware acceleration (`hw.gpu.mode = host`)
+* Disables FastBoot snapshots (`fastboot.forceColdBoot = yes`) so low-memory settings apply cleanly
 
-### 6. Launch with Low-Memory Host Flags (`launch`)
-Spawns the emulator with low-memory host flags and optionally auto-slims once booted:
+### 6. Restart Running Emulator with Low-Memory Flags (`restart`)
+Gracefully terminates the emulator, purges stale `hardware-qemu.ini` / snapshot state, and relaunches with `-lowram`, `-memory 1536`, and `-gpu host`:
 ```bash
-avdslim launch Pixel_8_API_34 --slim --ram=1536
+avdslim restart emulator-5554
+```
+
+### 7. Launch with Low-Memory Host Flags (`launch`)
+Spawns the emulator with low-memory host flags (`-lowram`, `-gpu host`, `-no-snapshot-load`, `-no-audio`) and optionally auto-slims once booted:
+```bash
+avdslim launch Pixel_10_Pro --slim --ram=1536
 ```
 
 ---

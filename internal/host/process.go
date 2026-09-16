@@ -70,6 +70,23 @@ func GetHostRssMb(pid int) int {
 	return 0
 }
 
+func GetHostFootprintMb(pid int) int {
+	cmd := exec.Command("footprint", "-p", strconv.Itoa(pid))
+	if out, err := cmd.CombinedOutput(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.Contains(line, "phys_footprint:") {
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					if mb, err := strconv.Atoi(fields[1]); err == nil && mb > 0 {
+						return mb
+					}
+				}
+			}
+		}
+	}
+	return GetHostRssMb(pid)
+}
+
 func PrintGuestMeminfo(raw string) {
 	fmt.Println("📱 GUEST (Android OS) Memory Breakdown:")
 	lines := strings.Split(raw, "\n")
