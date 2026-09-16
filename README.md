@@ -143,7 +143,31 @@ avdslim bake 1 --headless
 
 ---
 
-### 4. Zero-Friction Watch Mode (`watch`)
+### 4. Snapshot Live Configured State (`snapshot`)
+Want your test apps, debug build, local database, or test account logins preserved in the instant restore snapshot?
+1. Launch your emulator: `avdslim start`
+2. Install your apps, log into test accounts, and configure your test environment.
+3. Lock this exact state into your Golden Snapshot:
+```bash
+avdslim snapshot
+# Or alias:
+avdslim bake --live
+```
+Now, every future launch restores your pre-installed apps and credentials instantly in **< 1.5s**!
+
+---
+
+### 5. Remove / Reset Golden Snapshot (`unbake`)
+If an Android SDK image updates or you want to return to stock cold boots:
+```bash
+avdslim unbake
+# Or specify AVD name or index:
+avdslim unbake Pixel_10_Pro
+```
+
+---
+
+### 6. Zero-Friction Watch Mode (`watch`)
 Don't want to change your workflow? Run `avdslim watch` in the background. Whenever you launch an emulator from Android Studio or VS Code, `avdslim` detects it and automatically silences bloat as soon as it boots:
 ```bash
 avdslim watch
@@ -152,7 +176,7 @@ avdslim watch
 
 ---
 
-### 5. Instant Undo / Restore (`restore`, `off`)
+### 7. Instant Undo / Restore (`restore`, `off`)
 Need to verify a bug with 100% stock Google services? One command immediately re-enables all disabled packages, restores animations to 1.0x, and resets background limits:
 ```bash
 avdslim restore
@@ -162,7 +186,7 @@ avdslim off
 
 ---
 
-### 6. Slim an Active Emulator (`on`)
+### 8. Slim an Active Emulator (`on`)
 Immediately silences background bloat and trims memory on a running emulator:
 ```bash
 # Standard preset (safe for all apps):
@@ -177,7 +201,7 @@ avdslim on --keep=com.google.android.apps.maps
 
 ---
 
-### 7. Deep Memory Breakdown (`measure`)
+### 9. Deep Memory Breakdown (`measure`)
 Inspect host macOS memory (`phys_footprint`, resident RSS) alongside the guest Android `dumpsys meminfo`:
 ```bash
 avdslim measure
@@ -187,7 +211,7 @@ avdslim measure emulator-5554
 
 ---
 
-### 8. Tune Host AVD Configuration (`tune-avd`)
+### 10. Tune Host AVD Configuration (`tune-avd`)
 Configures an AVD's `config.ini` for optimal memory consumption and purges stale snapshots:
 ```bash
 avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
@@ -199,7 +223,7 @@ avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
 
 ---
 
-### 9. Restart Emulator with Clean Cache (`restart`)
+### 11. Restart Emulator with Clean Cache (`restart`)
 Gracefully shuts down the emulator, purges stale runtime snapshots, and relaunches with low-memory host flags:
 ```bash
 avdslim restart emulator-5554 --ram=1536
@@ -207,7 +231,7 @@ avdslim restart emulator-5554 --ram=1536
 
 ---
 
-### 10. Start / Launch Emulator (`start`, `run`, `launch`)
+### 12. Start / Launch Emulator (`start`, `run`, `launch`)
 Starts an AVD with low-memory host flags and auto-slims upon boot. If a Golden Snapshot exists, it boots in **<1.5s** automatically:
 ```bash
 # Interactive numbered menu (press 1, 2, or hit Enter for default)
@@ -234,7 +258,7 @@ avdslim start 1 --no-slim
 
 ---
 
-### 11. Environment Doctor (`doctor`)
+### 13. Environment Doctor (`doctor`)
 Audits your Android toolchain, active AVDs, Golden Snapshots, 16K page size overhead, and warns about software GPU fallback:
 ```bash
 avdslim doctor
@@ -242,7 +266,7 @@ avdslim doctor
 
 ---
 
-### 12. View Bloat Profiles (`profiles`)
+### 14. View Bloat Profiles (`profiles`)
 Inspects the list of disabled packages categorized by function (Assistant, Telephony, Consumer Bloat, etc.) and guaranteed core services:
 ```bash
 avdslim profiles

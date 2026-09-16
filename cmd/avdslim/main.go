@@ -55,8 +55,12 @@ func main() {
 		handleTuneAvd(subArgs)
 	case "launch", "start", "run":
 		handleLaunch(client, subArgs)
-	case "bake", "snapshot":
+	case "bake":
 		handleBake(client, subArgs)
+	case "snapshot", "snap":
+		handleSnapshot(client, subArgs)
+	case "unbake", "unsnapshot":
+		handleUnbake(subArgs)
 	case "restart":
 		handleRestart(client, subArgs)
 	case "bench", "benchmark":
@@ -95,7 +99,10 @@ Commands:
   start, run, launch [avd] Launch AVD with low-memory host flags & auto-slim upon boot
                        Options: --no-slim, --no-lowram, --headless, --cold, --ram=<MB> (default: 1536)
   bake [avd_name]      Create local Golden Snapshot (pruned & slimmed) for ~1.5s instant boots
-                       Options: --ram=<MB> (default: 1536), --aggressive, --headless
+                       Options: --ram=<MB> (default: 1536), --aggressive, --headless, --live
+  snapshot, snap       Capture running emulator (with pre-installed apps & test logins)
+                       into Golden Snapshot for instant <1.5s restores
+  unbake [avd_name]    Delete Golden Snapshot and return AVD to stock cold boots
   bench [device]       Show before/after memory & CPU efficiency scoreboard
   install-shim         Wrap SDK emulator binary so Android Studio launches stay slim
                        Options: --ram=<MB> (default: 1536)
@@ -726,6 +733,13 @@ func handleUninstallShim() {
 }
 
 func handleBake(client *adb.Client, args []string) {
+	for _, a := range args {
+		if a == "--live" || a == "--current" {
+			handleSnapshot(client, args)
+			return
+		}
+	}
+
 	installed := config.GetInstalledAvds()
 	var targetAvd string
 	ramMb := 1536
@@ -910,6 +924,143 @@ func handleBake(client *adb.Client, args []string) {
 	fmt.Printf("     avdslim start %s\n", targetAvd)
 	fmt.Println("   Or click 'Play' in Android Studio (if `avdslim install-shim` is enabled).")
 	fmt.Println("════════════════════════════════════════════════════════════════════════")
+	fmt.Println()
+}
+
+func handleSnapshot(client *adb.Client, args []string) {
+	var serial string
+	skipSlim := false
+	aggressive := false
+	snapName := "avdslim_clean"
+	var keepPackages []string
+
+	for _, a := range args {
+		if a == "--skip-slim" || a == "--no-prune" {
+			skipSlim = true
+		} else if a == "--aggressive" {
+			aggressive = true
+		} else if a == "--live" || a == "--current" {
+			// standard flag alias, ignore
+		} else if strings.HasPrefix(a, "--tag=") {
+			snapName = strings.TrimPrefix(a, "--tag=")
+		} else if strings.HasPrefix(a, "--name=") {
+			snapName = strings.TrimPrefix(a, "--name=")
+		} else if strings.HasPrefix(a, "--keep=") {
+			pkg := strings.TrimPrefix(a, "--keep=")
+			if pkg != "" {
+				keepPackages = append(keepPackages, pkg)
+			}
+		} else if !strings.HasPrefix(a, "--") {
+			serial = a
+		}
+	}
+
+	running, err := client.GetRunningEmulators()
+	if err != nil || len(running) == 0 {
+		fmt.Println("❌ No running Android emulator found via adb.")
+		fmt.Println()
+		fmt.Println("💡 To snapshot a custom configured state (with test apps & logins):")
+		fmt.Println("   1. Start your emulator: avdslim start")
+		fmt.Println("   2. Install your debug APKs / log into test accounts")
+		fmt.Println("   3. Run: avdslim snapshot")
+		return
+	}
+
+	if serial == "" {
+		if len(running) == 1 {
+			serial = running[0].Serial
+		} else {
+			fmt.Printf("Multiple running emulators detected. Using %s\n", running[0].Serial)
+			serial = running[0].Serial
+		}
+	}
+
+	// Get AVD Name
+	avdNameOut, _ := client.Exec("-s", serial, "emu", "avd", "name")
+	lines := strings.Split(strings.TrimSpace(avdNameOut), "\n")
+	avdName := ""
+	if len(lines) > 0 {
+		avdName = strings.TrimSpace(lines[0])
+	}
+	if avdName == "" || strings.Contains(avdName, "KO:") {
+		installed := config.GetInstalledAvds()
+		if len(installed) == 1 {
+			avdName = installed[0]["name"]
+		}
+	}
+
+	fmt.Printf("📸 Capturing Golden Snapshot from live emulator %s (%s)...\n", serial, avdName)
+	if !skipSlim {
+		fmt.Println("⚡ Trimming background daemons and caches while preserving installed apps...")
+		count, _ := client.Slim(serial, aggressive, keepPackages)
+		fmt.Printf("✓ Trimmed memory and disabled %d background bloat packages.\n", count)
+	}
+
+	fmt.Println("💾 Syncing filesystem...")
+	client.Exec("-s", serial, "shell", "sync")
+	time.Sleep(1 * time.Second)
+
+	fmt.Printf("📸 Saving snapshot %q...\n", snapName)
+	out, err := client.Exec("-s", serial, "emu", "avd", "snapshot", "save", snapName)
+	if err != nil || strings.Contains(out, "KO") {
+		fmt.Printf("❌ Failed to save snapshot: %s\n", strings.TrimSpace(out))
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("════════════════════════════════════════════════════════════════════════")
+	fmt.Printf(" 🎉 Live State Captured as Golden Snapshot for %s!\n", avdName)
+	fmt.Println("════════════════════════════════════════════════════════════════════════")
+	fmt.Printf(" • Target AVD: %s (%s)\n", avdName, serial)
+	fmt.Printf(" • Snapshot Name: %q\n", snapName)
+	fmt.Println(" • Preserved: All installed apps, local databases & logged-in accounts")
+	fmt.Println(" • Instant Restore: Next time you launch with `avdslim start` or Android Studio,")
+	fmt.Println("   it will boot into this exact configured state in < 1.5 seconds! ⚡")
+	fmt.Println(" • The running emulator remains active for your current work.")
+	fmt.Println("════════════════════════════════════════════════════════════════════════")
+	fmt.Println()
+}
+
+func handleUnbake(args []string) {
+	installed := config.GetInstalledAvds()
+	var targetAvd string
+
+	for _, a := range args {
+		if !strings.HasPrefix(a, "--") {
+			targetAvd = a
+		}
+	}
+
+	if targetAvd != "" {
+		if idx, err := strconv.Atoi(targetAvd); err == nil && idx >= 1 && idx <= len(installed) {
+			targetAvd = installed[idx-1]["name"]
+		}
+	} else if len(installed) > 0 {
+		var err error
+		targetAvd, err = selectAvdInteractively(installed, "Select an AVD to remove Golden Snapshot from")
+		if err != nil {
+			fmt.Printf("❌ %v\n", err)
+			return
+		}
+	} else {
+		fmt.Println("❌ No installed AVDs found.")
+		return
+	}
+
+	home, _ := os.UserHomeDir()
+	snapDir := filepath.Join(home, ".android", "avd", targetAvd+".avd", "snapshots", "avdslim_clean")
+	if _, err := os.Stat(snapDir); os.IsNotExist(err) {
+		fmt.Printf("ℹ️  No Golden Snapshot found for %s.\n", targetAvd)
+		return
+	}
+
+	if err := os.RemoveAll(snapDir); err != nil {
+		fmt.Printf("❌ Failed to remove snapshot: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✅ Removed Golden Snapshot 'avdslim_clean' for %s.\n", targetAvd)
+	fmt.Println("   Subsequent launches will perform standard boots.")
 	fmt.Println()
 }
 
