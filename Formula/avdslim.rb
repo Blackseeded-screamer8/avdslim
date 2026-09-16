@@ -1,26 +1,26 @@
 class Avdslim < Formula
   desc "Drop Android Virtual Device (AVD) RAM from ~8GB to ~1.5GB on Apple Silicon & Linux"
   homepage "https://github.com/kdbhalala/avdslim"
-  version "1.0.4"
+  version "1.0.5"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.4/avdslim_v1.0.4_darwin_arm64.tar.gz"
-      sha256 "b5b7a834c9cd827154f1201121f02133c858ce7075072619a515a4ad61e43b60"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.5/avdslim_v1.0.5_darwin_arm64.tar.gz"
+      sha256 "c82c5d13744d9b02f9a3a93a5f761253586f16ad0be313c4365ade0ed76497f5"
     else
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.4/avdslim_v1.0.4_darwin_amd64.tar.gz"
-      sha256 "26ff908fc719c5aba47056bfc0c26272feb55c3966dc22743787644fa2449738"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.5/avdslim_v1.0.5_darwin_amd64.tar.gz"
+      sha256 "266b1a19cb5899ef73de6ccdfd96058de4c1355801f272b537469614995909c3"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.4/avdslim_v1.0.4_linux_arm64.tar.gz"
-      sha256 "905dd7596415950095cd0fec076280948d47d06f13b96e0063c9f1d4df62f098"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.5/avdslim_v1.0.5_linux_arm64.tar.gz"
+      sha256 "f4e750ad1a657448eb83c9b872fff53bd6ae2d9ceb8f420f9309560aa9256f5d"
     else
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.4/avdslim_v1.0.4_linux_amd64.tar.gz"
-      sha256 "bc418d66d5cd6d565a9d8b3b144cc491d76b3052b320544e5aee30dab910b7ea"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.5/avdslim_v1.0.5_linux_amd64.tar.gz"
+      sha256 "a893b316a00b483bf9ba292345e562537a0eb6566ee700893e66ea47f6160465"
     end
   end
 
@@ -29,6 +29,6 @@ class Avdslim < Formula
   end
 
   test do
-    assert_match "AVD-SLIM", shell_output("#{bin}/avdslim version")
+    assert_match "avdslim", shell_output("#{bin}/avdslim version")
   end
 end
