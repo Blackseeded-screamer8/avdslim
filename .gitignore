@@ -5,9 +5,7 @@ bin/
 *.so
 *.dylib
 
-# Rust comparison artifacts
-rust_comparison/target/
-rust_comparison/Cargo.lock
+
 
 # IDE & OS
 .DS_Store

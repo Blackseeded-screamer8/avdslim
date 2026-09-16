@@ -199,20 +199,7 @@ avdslim profiles
 
 ---
 
-## ⚡ Benchmark: Go vs Rust
 
-Both Go and Rust implementations were benchmarked in `bench/`:
-
-| Metric | Go (Winner) | Rust |
-|---|---|---|
-| **Startup Latency** | **2.61 ms** | **2.08 ms** |
-| **Incremental Build Time** | **206 ms** | **3,088 ms** |
-| **External Dependencies** | **0 (100% Stdlib)** | 11 crates |
-| **Cross-Compilation** | **Native out-of-the-box** | Requires target toolchains & linkers |
-
-**Verdict**: Go was selected for its zero-dependency standard library and instant cross-compilation.
-
----
 
 ## 📜 License
 

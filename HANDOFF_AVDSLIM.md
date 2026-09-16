@@ -23,11 +23,6 @@
 │   │   └── tuner.go          # Parses & modifies ~/.android/avd/<name>.avd/config.ini
 │   └── host/
 │       └── process.go        # QEMU host PID resolution & RSS memory measurement
-├── rust_comparison/          # Complete parallel Rust implementation for benchmarking
-│   ├── Cargo.toml
-│   └── src/main.rs
-├── bench/
-│   └── benchmark.py          # Automated head-to-head benchmarking script
 ├── bin/
 │   └── avdslim               # Compiled static binary
 ├── Makefile                  # Build, install, test, and release targets
@@ -36,28 +31,14 @@
 
 ---
 
-## 3. Go vs. Rust Benchmark Results
-
-| Metric | Go (Winner) | Rust | Notes |
-|---|---|---|---|
-| **Binary Size** | **2.6 MB** | 0.44 MB | Rust is ~6x smaller; 2.6 MB is negligible for CLI tooling. |
-| **Startup Latency** | **2.61 ms** | 2.08 ms | Imperceptible ~0.5ms difference. |
-| **Incremental Build Time** | **206 ms** | 3,088 ms | Go compiles ~10x faster. |
-| **External Dependencies** | **0 (100% Stdlib)** | 11 Crates | Zero supply-chain risk and zero vendor bloat in Go. |
-| **Cross-Compilation** | **Native (1 command)** | Complex (linkers required) | Go cross-compiles to Darwin/Linux/Windows natively. |
-
-**Verdict**: Go was selected as the primary production implementation. The Rust version is preserved in `rust_comparison/` as an archived reference.
-
----
-
-## 4. Key Fixes & Optimizations Implemented
+## 3. Key Fixes & Optimizations Implemented
 
 ### Accurate Host QEMU PID Detection
 - **Issue**: Previously, searching `ps -eo pid,command` for `emulator` and the serial port matched `./bin/avdslim measure emulator-5554` itself, returning the 5 MB CLI process RSS instead of the ~1.3–2.5 GB QEMU process.
 - **Solution**:
   1. Utilized `lsof -i :<port> -sTCP:LISTEN -t` (e.g. port `5554` for `emulator-5554`) to directly query the OS for the listening QEMU process socket.
   2. Implemented fallback process inspection that explicitly filters out `os.Getpid()`, `avdslim`, `crashpad_handler`, and `netsimd`.
-  3. Synchronized fix across both Go (`internal/host/process.go`) and Rust (`rust_comparison/src/main.rs`).
+  3. Implemented robust cross-platform host PID detection in `internal/host/process.go`.
 
 ### Guest Memory Reclamation
 - Disables 27–35+ bloat packages (`com.google.android.googlequicksearchbox`, `com.google.android.as`, `com.google.android.apps.photos`, `com.google.android.youtube`, etc.).
