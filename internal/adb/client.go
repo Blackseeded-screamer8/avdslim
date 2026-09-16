@@ -28,6 +28,56 @@ type SlimState struct {
 	Timestamp        string   `json:"timestamp"`
 	DisabledPackages []string `json:"disabled_packages"`
 	Preset           string   `json:"preset"`
+	// Settings maps "namespace/name" to its value before avdslim first changed it
+	// (a nil value means it was unset). A nil map means a <= 1.0.5 state.
+	Settings map[string]*string `json:"settings"`
+}
+
+// tweak is one guest setting Slim changes; Group is the name --skip accepts.
+type tweak struct {
+	Group, Namespace, Name, Value string
+}
+
+var tweaks = []tweak{
+	{"animations", "global", "window_animation_scale", "0"},
+	{"animations", "global", "transition_animation_scale", "0"},
+	{"animations", "global", "animator_duration_scale", "0"},
+	{"bglimit", "global", "background_process_limit", "4"},
+	{"sync", "global", "auto_sync", "0"},
+	{"location", "secure", "location_mode", "0"},
+	{"setup", "secure", "user_setup_complete", "1"},
+	{"setup", "global", "device_provisioned", "1"},
+}
+
+// SkipGroups lists the values --skip accepts.
+var SkipGroups = []string{"animations", "bglimit", "sync", "location", "setup"}
+
+// IsSkipGroup reports whether g is a valid --skip value.
+func IsSkipGroup(g string) bool {
+	for _, s := range SkipGroups {
+		if s == g {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Client) readState(serial string) (SlimState, bool) {
+	var state SlimState
+	raw, err := c.Exec("-s", serial, "shell", "cat", StateFilePath)
+	if err != nil || !strings.Contains(raw, "disabled_packages") {
+		return state, false
+	}
+	return state, json.Unmarshal([]byte(raw), &state) == nil
+}
+
+func (c *Client) getSetting(serial, namespace, name string) *string {
+	out, err := c.Exec("-s", serial, "shell", "settings", "get", namespace, name)
+	v := strings.TrimSpace(out)
+	if err != nil || v == "null" || v == "" {
+		return nil
+	}
+	return &v
 }
 
 type Client struct {
@@ -101,7 +151,8 @@ func (c *Client) ResolveDevice(args []string) (string, error) {
 	return "", fmt.Errorf("device serial required")
 }
 
-func (c *Client) Slim(serial string, aggressive bool, keepPackages []string) (int, error) {
+// Slim disables bloat packages and applies tweaks, except groups in skip.
+func (c *Client) Slim(serial string, aggressive bool, keepPackages []string, skip map[string]bool) (int, error) {
 	targetPackages := make([]string, 0, 50)
 	for _, pkgs := range bloat.StandardBloatCategories {
 		targetPackages = append(targetPackages, pkgs...)
@@ -141,23 +192,38 @@ func (c *Client) Slim(serial string, aggressive bool, keepPackages []string) (in
 	if aggressive {
 		preset = "Aggressive"
 	}
+	// Record each setting's original value before changing it. Keep values from an
+	// earlier slim, or a re-slim would record the slimmed values as "original".
+	// A <= 1.0.5 state has no originals and its values are already slimmed, so record none.
+	prev, hasPrev := c.readState(serial)
+	var originals map[string]*string
+	if !hasPrev || prev.Settings != nil {
+		originals = make(map[string]*string)
+		for k, v := range prev.Settings {
+			originals[k] = v
+		}
+		for _, t := range tweaks {
+			key := t.Namespace + "/" + t.Name
+			if _, ok := originals[key]; !ok && !skip[t.Group] {
+				originals[key] = c.getSetting(serial, t.Namespace, t.Name)
+			}
+		}
+	}
+
 	state := SlimState{
 		Timestamp:        time.Now().Format(time.RFC3339),
 		DisabledPackages: disabledList,
 		Preset:           preset,
+		Settings:         originals,
 	}
 	stateJson, _ := json.Marshal(state)
 	c.Exec("-s", serial, "shell", "echo", fmt.Sprintf("'%s'", string(stateJson)), ">", StateFilePath)
 
-	// Tune Settings
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "window_animation_scale", "0")
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "transition_animation_scale", "0")
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "animator_duration_scale", "0")
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "background_process_limit", "4")
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "auto_sync", "0")
-	c.Exec("-s", serial, "shell", "settings", "put", "secure", "location_mode", "0")
-	c.Exec("-s", serial, "shell", "settings", "put", "secure", "user_setup_complete", "1")
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "device_provisioned", "1")
+	for _, t := range tweaks {
+		if !skip[t.Group] {
+			c.Exec("-s", serial, "shell", "settings", "put", t.Namespace, t.Name, t.Value)
+		}
+	}
 
 	// Trim memory
 	c.Exec("-s", serial, "shell", "am", "kill-all")
@@ -170,12 +236,9 @@ func (c *Client) Slim(serial string, aggressive bool, keepPackages []string) (in
 
 func (c *Client) Restore(serial string) (int, error) {
 	var packagesToEnable []string
-	stateRaw, err := c.Exec("-s", serial, "shell", "cat", StateFilePath)
-	if err == nil && strings.Contains(stateRaw, "disabled_packages") {
-		var state SlimState
-		if json.Unmarshal([]byte(stateRaw), &state) == nil {
-			packagesToEnable = state.DisabledPackages
-		}
+	state, hasState := c.readState(serial)
+	if hasState {
+		packagesToEnable = state.DisabledPackages
 	}
 
 	if len(packagesToEnable) == 0 {
@@ -194,12 +257,27 @@ func (c *Client) Restore(serial string) (int, error) {
 		}
 	}
 
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "window_animation_scale", "1")
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "transition_animation_scale", "1")
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "animator_duration_scale", "1")
-	c.Exec("-s", serial, "shell", "settings", "delete", "global", "background_process_limit")
-	c.Exec("-s", serial, "shell", "settings", "put", "global", "auto_sync", "1")
-	c.Exec("-s", serial, "shell", "settings", "put", "secure", "location_mode", "3")
+	if state.Settings != nil {
+		// Exact inverse: put back what Slim recorded; skipped groups were never touched.
+		for _, t := range tweaks {
+			orig, recorded := state.Settings[t.Namespace+"/"+t.Name]
+			switch {
+			case !recorded:
+			case orig == nil:
+				c.Exec("-s", serial, "shell", "settings", "delete", t.Namespace, t.Name)
+			default:
+				c.Exec("-s", serial, "shell", "settings", "put", t.Namespace, t.Name, *orig)
+			}
+		}
+	} else {
+		// ponytail: state from avdslim <= 1.0.5 has no originals, so fall back to stock values.
+		c.Exec("-s", serial, "shell", "settings", "put", "global", "window_animation_scale", "1")
+		c.Exec("-s", serial, "shell", "settings", "put", "global", "transition_animation_scale", "1")
+		c.Exec("-s", serial, "shell", "settings", "put", "global", "animator_duration_scale", "1")
+		c.Exec("-s", serial, "shell", "settings", "delete", "global", "background_process_limit")
+		c.Exec("-s", serial, "shell", "settings", "put", "global", "auto_sync", "1")
+		c.Exec("-s", serial, "shell", "settings", "put", "secure", "location_mode", "3")
+	}
 	c.Exec("-s", serial, "shell", "rm", "-f", StateFilePath)
 
 	return restoredCount, nil

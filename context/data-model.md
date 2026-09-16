@@ -19,9 +19,12 @@ guest, or live emulator flags.
   Consumed by `start`/`launch` and the shim as
   `-snapshot avdslim_clean -no-snapshot-save`.
 - **Slim state** — `/data/local/tmp/avdslim_state.json` **on the device**
-  (`SlimState{timestamp, disabled_packages, preset}`), written by `Slim`,
-  read by `Restore`. Absent (or unparseable) → `Restore` re-enables every
-  known package (standard + aggressive). Wiped on factory reset; `IsSlimmed`
+  (`SlimState{timestamp, disabled_packages, preset, settings}`), written by
+  `Slim`, read by `Restore`. `settings` maps `namespace/name` → value before
+  avdslim first changed it (`null` = was unset); kept across re-slims;
+  `--skip` groups are not recorded. `settings` missing (state from <= 1.0.5)
+  → `Restore` puts hardcoded stock values back. Absent (or unparseable) →
+  `Restore` re-enables every known package (standard + aggressive). Wiped on factory reset; `IsSlimmed`
   in `list`/`watch`/`doctor` is derived from this file's existence.
 - **Bloat lists** — compile-time constants in `internal/bloat/packages.go`:
   `StandardBloatCategories map[string][]string` (~35 pkgs), `AggressiveBloatPackages`

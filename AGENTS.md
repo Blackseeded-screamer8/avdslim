@@ -11,8 +11,9 @@ snapshot for ~1.5 s boots.
   `internal/host` (QEMU PID/memory probing) · `internal/shim` (Studio wrapper) ·
   `internal/doctor` (read-only audit).
 - State: host `~/.android/avd/<name>.avd/` (`config.ini`, `snapshots/avdslim_clean/`);
-  guest `/data/local/tmp/avdslim_state.json`. No DB, no tests exist.
-- Verify: `make build`, `go vet ./...`, `gofmt -l .`; `go test ./...` is vacuous.
+  guest `/data/local/tmp/avdslim_state.json`. No DB.
+- Verify: `make build`, `go vet ./...`, `gofmt -l .`; `go test ./...` (only
+  `internal/adb` has a test).
   `avdslim doctor` / `on` / `off` need a live emulator.
 - Module path `github.com/kdbhalala/avdslim` must match the remote, or
   `go install` breaks.

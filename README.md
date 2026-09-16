@@ -191,12 +191,12 @@ Don't want to change your workflow? Run `avdslim watch` in the background. Whene
 ```bash
 avdslim watch
 ```
-*(Options: pass `--aggressive` or `--keep=<package>`)*.
+*(Options: `--aggressive`, `--keep=<package>`, `--skip=<groups>`)*.
 
 ---
 
 ### 7. Instant Undo / Restore (`restore`, `off`)
-Need to verify a bug with 100% stock Google services? One command immediately re-enables all disabled packages, restores animations to 1.0x, and resets background limits:
+Need to verify a bug with 100% stock Google services? One command re-enables the packages avdslim disabled and puts every setting it changed back to the value it had before (e.g. your 0.5x animations stay 0.5x):
 ```bash
 avdslim restore
 # Or use alias:
@@ -216,7 +216,19 @@ avdslim on --aggressive
 
 # Keep a specific app (e.g. Google Maps):
 avdslim on --keep=com.google.android.apps.maps
+
+# Leave some settings alone:
+avdslim on --skip=animations,sync
 ```
+`--skip` also works with `watch`, `start`, `bake` and `snapshot`. Groups:
+
+| Group | Settings left unchanged |
+| :--- | :--- |
+| `animations` | window, transition and animator scales (otherwise 0x) |
+| `bglimit` | `background_process_limit` (otherwise 4) |
+| `sync` | `auto_sync` (otherwise off) |
+| `location` | `location_mode` (otherwise off) |
+| `setup` | `user_setup_complete`, `device_provisioned` (otherwise marked done) |
 
 ---
 

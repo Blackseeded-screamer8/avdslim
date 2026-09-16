@@ -12,7 +12,7 @@ Android SDK (`ANDROID_HOME`/`ANDROID_SDK_ROOT` or OS-default path) with
 ```bash
 make build          # → bin/avdslim
 make install        # copies to ~/.local/bin or /usr/local/bin
-go test ./...       # vacuous: no test files exist
+go test ./...       # only internal/adb has a test (Slim/Restore inverse)
 go vet ./...        # run manually; no CI gate
 ./bin/avdslim doctor        # env audit, safe read-only
 ./bin/avdslim list          # running emulators + installed AVDs

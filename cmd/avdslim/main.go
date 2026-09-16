@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -79,6 +80,21 @@ func main() {
 	}
 }
 
+// addSkip records a --skip=a,b flag, exiting on an unknown group so typos are not silently ignored.
+func addSkip(skip map[string]bool, flag string) {
+	for _, g := range strings.Split(strings.TrimPrefix(flag, "--skip="), ",") {
+		g = strings.TrimSpace(g)
+		if g == "" {
+			continue
+		}
+		if !adb.IsSkipGroup(g) {
+			fmt.Fprintf(os.Stderr, "❌ Unknown --skip value %q (valid: %s)\n", g, strings.Join(adb.SkipGroups, ", "))
+			os.Exit(1)
+		}
+		skip[g] = true
+	}
+}
+
 func printUsage() {
 	fmt.Printf(`════════════════════════════════════════════════════════════════════════
  ⚡ AVD-SLIM — Android Emulator RAM & CPU Optimizer
@@ -94,16 +110,17 @@ Commands:
   on [device]          Slim down emulator: disable bloat daemons & trim RAM
                        Options: --aggressive (also disables Play Store updater)
                                 --keep=<package> (preserve specific package, e.g. Maps)
+                                --skip=<groups> (leave settings alone: animations,bglimit,sync,location,setup)
   restore, off         Instant 100%% stock restore (re-enables packages, animations & sync)
   watch                Auto-detect & slim new emulators as soon as they boot
-                       Options: --aggressive, --keep=<package>
+                       Options: --aggressive, --keep=<package>, --skip=<groups>
   tune-avd [avd_name]  Tune host AVD config.ini (RAM=1024M, Metal GPU, no cameras)
                        Options: --ram=<MB> (default: 1024), --heap=<MB> (default: 256)
   start, run, launch [avd] Launch AVD with low-memory host flags & auto-slim upon boot
                        Options: --no-slim, --no-lowram, --headless, --cold, --ram=<MB> (default: 1024)
   stop, kill [device]  Gracefully shut down emulator (Options: --snap, -f)
   bake [avd_name]      Create local Golden Snapshot (pruned & slimmed) for ~1.5s instant boots
-                       Options: --ram=<MB> (default: 1024), --aggressive, --headless, --live
+                       Options: --ram=<MB> (default: 1024), --aggressive, --skip=<groups>, --headless, --live
   snapshot, snap       Capture running emulator (with pre-installed apps & test logins)
                        into Golden Snapshot for instant <1.5s restores
   unbake [avd_name]    Delete Golden Snapshot and return AVD to stock cold boots
@@ -122,6 +139,7 @@ Examples:
   avdslim measure
   avdslim on --aggressive
   avdslim on --keep=com.google.android.apps.maps
+  avdslim on --skip=animations,sync
   avdslim tune-avd Pixel_10_Pro --ram=1024
   avdslim restart
 `, version)
@@ -212,6 +230,7 @@ func handleOn(client *adb.Client, args []string) {
 	aggressive := false
 	filteredArgs := make([]string, 0, len(args))
 	var keepPackages []string
+	skip := make(map[string]bool)
 	for _, a := range args {
 		if a == "--aggressive" {
 			aggressive = true
@@ -220,7 +239,9 @@ func handleOn(client *adb.Client, args []string) {
 			if pkg != "" {
 				keepPackages = append(keepPackages, pkg)
 			}
-		} else {
+		} else if strings.HasPrefix(a, "--skip=") {
+			addSkip(skip, a)
+		} else if !strings.HasPrefix(a, "--") {
 			filteredArgs = append(filteredArgs, a)
 		}
 	}
@@ -250,10 +271,13 @@ func handleOn(client *adb.Client, args []string) {
 	}
 
 	fmt.Println("1. Disabling non-essential background daemons:")
-	count, _ := client.Slim(serial, aggressive, keepPackages)
+	count, _ := client.Slim(serial, aggressive, keepPackages, skip)
 	fmt.Printf("   -> Successfully disabled %d packages.\n\n", count)
 
-	fmt.Println("2. Tuned system settings (animations 0x, background limit 4, sync off).")
+	fmt.Println("2. Tuned system settings (animations 0x, background limit 4, sync off, location off).")
+	if len(skip) > 0 {
+		fmt.Printf("   Left unchanged (--skip): %s\n", strings.Join(sortedKeys(skip), ", "))
+	}
 	fmt.Println("3. Purged cached processes and trimmed memory.")
 	fmt.Println()
 
@@ -294,7 +318,7 @@ func handleOff(client *adb.Client, args []string) {
 	fmt.Println("1. Re-enabling packages:")
 	count, _ := client.Restore(serial)
 	fmt.Printf("   -> Restored %d packages.\n\n", count)
-	fmt.Println("2. Restored default system settings (animations 1.0x, auto-sync on).")
+	fmt.Println("2. Restored the system settings avdslim changed to their previous values.")
 	fmt.Printf("✅ Successfully restored %s to stock configuration.\n\n", serial)
 }
 
@@ -426,8 +450,11 @@ func handleLaunch(client *adb.Client, args []string) {
 	ramMb := 1024
 	gpuMode := config.GetRecommendedGpuMode()
 
+	var slimArgs []string
 	for _, a := range options {
-		if a == "--no-slim" {
+		if a == "--aggressive" || strings.HasPrefix(a, "--keep=") || strings.HasPrefix(a, "--skip=") {
+			slimArgs = append(slimArgs, a)
+		} else if a == "--no-slim" {
 			doSlim = false
 		} else if a == "--slim" {
 			doSlim = true
@@ -502,10 +529,10 @@ func handleLaunch(client *adb.Client, args []string) {
 		if booted {
 			if hasGolden && !forceCold {
 				fmt.Println("✓ Instant boot complete via Golden Snapshot! Refreshing slim state...")
-				handleOn(client, nil)
+				handleOn(client, slimArgs)
 			} else {
 				fmt.Println("✓ Boot complete! Applying avdslim optimizations...")
-				handleOn(client, nil)
+				handleOn(client, slimArgs)
 			}
 		} else {
 			fmt.Println("⚠️  Boot timed out after 120s. You can run `avdslim on` manually.")
@@ -650,6 +677,7 @@ func findEmulator() string {
 func handleWatch(client *adb.Client, args []string) {
 	aggressive := false
 	var keepPackages []string
+	skip := make(map[string]bool)
 	for _, a := range args {
 		if a == "--aggressive" {
 			aggressive = true
@@ -658,6 +686,8 @@ func handleWatch(client *adb.Client, args []string) {
 			if pkg != "" {
 				keepPackages = append(keepPackages, pkg)
 			}
+		} else if strings.HasPrefix(a, "--skip=") {
+			addSkip(skip, a)
 		}
 	}
 
@@ -670,6 +700,9 @@ func handleWatch(client *adb.Client, args []string) {
 	fmt.Printf("   Preset: %s\n", preset)
 	if len(keepPackages) > 0 {
 		fmt.Printf("   Preserving packages: %s\n", strings.Join(keepPackages, ", "))
+	}
+	if len(skip) > 0 {
+		fmt.Printf("   Leaving settings unchanged: %s\n", strings.Join(sortedKeys(skip), ", "))
 	}
 	fmt.Println("   Monitoring for newly booted Android emulators in the background.")
 	fmt.Println("   Will automatically apply low-memory optimizations as soon as emulators boot.")
@@ -719,7 +752,7 @@ func handleWatch(client *adb.Client, args []string) {
 				}
 
 				fmt.Printf("\n✨ [%s] Emulator booted! Automatically applying avdslim...\n", emu.Serial)
-				count, _ := client.Slim(emu.Serial, aggressive, keepPackages)
+				count, _ := client.Slim(emu.Serial, aggressive, keepPackages, skip)
 				fmt.Printf("✓ [%s] Successfully slimmed! Disabled %d packages, trimmed RAM.\n\n", emu.Serial, count)
 				slimmedDevices[emu.Serial] = true
 			}
@@ -798,7 +831,7 @@ func handleInstallShim(args []string) {
 
 	fmt.Println("✅ Successfully installed emulator shim!")
 	fmt.Println("   • From now on, launching emulators via Android Studio 'Play' button")
-	fmt.Println("     will automatically inject -memory 1024 -lowram -no-audio flags.")
+	fmt.Printf("     will automatically inject -memory %d -lowram -no-audio flags.\n", ramMb)
 	fmt.Println("   • To restore stock Android Studio emulator behavior anytime:")
 	fmt.Println("     avdslim uninstall-shim")
 	fmt.Println()
@@ -828,9 +861,12 @@ func handleBake(client *adb.Client, args []string) {
 	aggressive := false
 	headless := false
 	var keepPackages []string
+	skip := make(map[string]bool)
 
 	for _, a := range args {
-		if strings.HasPrefix(a, "--ram=") {
+		if strings.HasPrefix(a, "--skip=") {
+			addSkip(skip, a)
+		} else if strings.HasPrefix(a, "--ram=") {
 			if v, err := strconv.Atoi(strings.TrimPrefix(a, "--ram=")); err == nil {
 				ramMb = v
 			}
@@ -957,7 +993,7 @@ func handleBake(client *adb.Client, args []string) {
 
 	// 3. Apply avdslim optimizations
 	fmt.Println("⚡ Pruning bloatware & tuning runtime settings...")
-	count, err := client.Slim(targetSerial, aggressive, keepPackages)
+	count, err := client.Slim(targetSerial, aggressive, keepPackages, skip)
 	if err != nil {
 		fmt.Printf("⚠️  Warning during slim: %v\n", err)
 	} else {
@@ -1015,10 +1051,13 @@ func handleSnapshot(client *adb.Client, args []string) {
 	aggressive := false
 	snapName := "avdslim_clean"
 	var keepPackages []string
+	skip := make(map[string]bool)
 
 	for _, a := range args {
 		if a == "--skip-slim" || a == "--no-prune" {
 			skipSlim = true
+		} else if strings.HasPrefix(a, "--skip=") {
+			addSkip(skip, a)
 		} else if a == "--aggressive" {
 			aggressive = true
 		} else if a == "--live" || a == "--current" {
@@ -1074,7 +1113,7 @@ func handleSnapshot(client *adb.Client, args []string) {
 	fmt.Printf("📸 Capturing Golden Snapshot from live emulator %s (%s)...\n", serial, avdName)
 	if !skipSlim {
 		fmt.Println("⚡ Trimming background daemons and caches while preserving installed apps...")
-		count, _ := client.Slim(serial, aggressive, keepPackages)
+		count, _ := client.Slim(serial, aggressive, keepPackages, skip)
 		fmt.Printf("✓ Trimmed memory and disabled %d background bloat packages.\n", count)
 	}
 
@@ -1146,3 +1185,11 @@ func handleUnbake(args []string) {
 	fmt.Println()
 }
 
+func sortedKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
