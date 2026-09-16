@@ -77,7 +77,7 @@ Commands:
   on [device]          Slim down emulator: disable bloat daemons & trim RAM
                        Options: --aggressive (also disables Play Store updater)
                                 --keep=<package> (preserve specific package, e.g. Maps)
-  restore, off         Instant 100% stock restore (re-enables packages, animations & sync)
+  restore, off         Instant 100%% stock restore (re-enables packages, animations & sync)
   watch                Auto-detect & slim new emulators as soon as they boot
                        Options: --aggressive, --keep=<package>
   tune-avd [avd_name]  Tune host AVD config.ini (RAM=1536M, Metal GPU, no cameras)
