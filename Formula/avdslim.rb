@@ -1,26 +1,26 @@
 class Avdslim < Formula
   desc "Drop Android Virtual Device (AVD) RAM from ~8GB to ~1.5GB on Apple Silicon & Linux"
   homepage "https://github.com/kdbhalala/avdslim"
-  version "1.0.3"
+  version "1.0.4"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.3/avdslim_v1.0.3_darwin_arm64.tar.gz"
-      sha256 "8289ed854b3b88f548a90320096103ebd8a9bc18bd7d2e223ca48dc3ff936df8"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.4/avdslim_v1.0.4_darwin_arm64.tar.gz"
+      sha256 "b5b7a834c9cd827154f1201121f02133c858ce7075072619a515a4ad61e43b60"
     else
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.3/avdslim_v1.0.3_darwin_amd64.tar.gz"
-      sha256 "046056ae8cf66d626dfc8147b77512fbcff4952a9e73d3896281e642607be965"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.4/avdslim_v1.0.4_darwin_amd64.tar.gz"
+      sha256 "26ff908fc719c5aba47056bfc0c26272feb55c3966dc22743787644fa2449738"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.3/avdslim_v1.0.3_linux_arm64.tar.gz"
-      sha256 "1880c70c5377281b79bfc4700b2ae33cdb656cd39ec061303e9d3acb43f60d64"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.4/avdslim_v1.0.4_linux_arm64.tar.gz"
+      sha256 "905dd7596415950095cd0fec076280948d47d06f13b96e0063c9f1d4df62f098"
     else
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.3/avdslim_v1.0.3_linux_amd64.tar.gz"
-      sha256 "2d07bbe6b15ade5be2e2f9ae84ff146039421882e7c43d5f9c88594f88280d8c"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.4/avdslim_v1.0.4_linux_amd64.tar.gz"
+      sha256 "bc418d66d5cd6d565a9d8b3b144cc491d76b3052b320544e5aee30dab910b7ea"
     end
   end
 
