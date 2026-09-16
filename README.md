@@ -53,23 +53,29 @@ Just like `simslim` silences iOS simulators via `launchctl`, `avdslim`:
 
 ## 🚀 Installation
 
-### Option 1: Homebrew (macOS / Linux)
+### Option 1: One-Line Installer (Recommended)
 ```bash
-brew install kdbhalala/tap/avdslim
+curl -fsSL https://raw.githubusercontent.com/kdbhalala/avdslim/main/install.sh | bash
 ```
 
-### Option 2: Go Install
+### Option 2: Homebrew (macOS / Linux directly from this repo)
+```bash
+brew tap kdbhalala/avdslim https://github.com/kdbhalala/avdslim.git
+brew install avdslim
+```
+
+### Option 3: Go Install
 ```bash
 go install github.com/kdbhalala/avdslim/cmd/avdslim@latest
 ```
 
-### Option 3: Pre-built Binaries
+### Option 4: Pre-built Binaries
 Download pre-compiled binaries from [GitHub Releases](https://github.com/kdbhalala/avdslim/releases):
 * macOS Apple Silicon: `avdslim_*_darwin_arm64.tar.gz`
 * macOS Intel: `avdslim_*_darwin_amd64.tar.gz`
 * Linux: `avdslim_*_linux_amd64.tar.gz` / `avdslim_*_linux_arm64.tar.gz`
 
-### Option 4: Build from Source (100% Stdlib, Zero Dependencies)
+### Option 5: Build from Source (100% Stdlib, Zero Dependencies)
 ```bash
 git clone https://github.com/kdbhalala/avdslim.git
 cd avdslim
