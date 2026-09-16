@@ -137,6 +137,8 @@ avdslim install-shim
 ```
 * **Zero workflow changes**: Android Studio launches automatically stay slimmed (1024 MB, `-lowram`, Metal GPU).
 * **Safe & reversible anytime**: `avdslim uninstall-shim` restores the original SDK binary instantly.
+* **After an emulator update in Android Studio**, the SDK Manager replaces the shim and launches go back to stock. `avdslim doctor` and `avdslim watch` warn about it; run `avdslim install-shim` again. An update can also invalidate the golden snapshot, so re-run `avdslim bake` if boots are slow again.
+* **Not supported on Windows**: Android Studio runs `emulator.exe` directly, so a script wrapper can't replace it. Use `avdslim start` and `avdslim tune-avd` instead.
 
 ---
 

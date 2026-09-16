@@ -42,15 +42,56 @@ func IsShimInstalled() (bool, error) {
 	}
 
 	if _, err := os.Stat(realPath); err == nil {
-		data, err := os.ReadFile(emuPath)
-		if err == nil && strings.Contains(string(data), shimHeader) {
-			return true, nil
-		}
+		return hasShimHeader(emuPath), nil
 	}
 	return false, nil
 }
 
+// IsShimOverwritten reports whether an emulator update replaced the shim:
+// emulator.real is still there but emulator is no longer our wrapper.
+func IsShimOverwritten() bool {
+	emuPath, realPath, err := GetEmulatorBinaryPaths()
+	if err != nil {
+		return false
+	}
+	if _, err := os.Stat(realPath); err != nil {
+		return false
+	}
+	if _, err := os.Stat(emuPath); err != nil {
+		return false
+	}
+	return !hasShimHeader(emuPath)
+}
+
+// IsShimOutdated reports whether an installed shim predates the defaults file
+// (avdslim <= 1.0.5), so it ignores --ram from it until reinstalled.
+func IsShimOutdated() bool {
+	emuPath, _, err := GetEmulatorBinaryPaths()
+	if err != nil || !hasShimHeader(emuPath) {
+		return false
+	}
+	data, err := os.ReadFile(emuPath) // our script, small
+	return err == nil && !strings.Contains(string(data), "DEFAULTS_FILE=")
+}
+
+// hasShimHeader checks only the first bytes; the real emulator binary is large.
+func hasShimHeader(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	buf := make([]byte, 256)
+	n, _ := f.Read(buf)
+	return strings.Contains(string(buf[:n]), shimHeader)
+}
+
 func InstallShim(defaultRam int) error {
+	if runtime.GOOS == "windows" {
+		return fmt.Errorf("install-shim is not supported on Windows: Android Studio runs emulator.exe directly, " +
+			"so a script wrapper cannot replace it. Use `avdslim start` and `avdslim tune-avd` instead")
+	}
+
 	emuPath, realPath, err := GetEmulatorBinaryPaths()
 	if err != nil {
 		return err
@@ -72,9 +113,7 @@ func InstallShim(defaultRam int) error {
 		return fmt.Errorf("emulator binary not found at %s", emuPath)
 	}
 
-	// Check if emuPath is already a script or real binary
-	data, _ := os.ReadFile(emuPath)
-	if strings.Contains(string(data), shimHeader) {
+	if hasShimHeader(emuPath) {
 		return writeShimScript(emuPath, realPath, defaultRam)
 	}
 
@@ -115,60 +154,8 @@ func UninstallShim() error {
 }
 
 func writeShimScript(emuPath, realPath string, defaultRam int) error {
-	var script string
-
-	if runtime.GOOS == "windows" {
-		script = fmt.Sprintf(`@echo off
-rem %s — transparently injects low-memory flags
-setlocal enabledelayedexpansion
-
-set "REAL_EMU=%%~dp0emulator.real.exe"
-if not exist "!REAL_EMU!" (
-    echo [avdslim] Error: Real emulator binary not found at !REAL_EMU! 1>&2
-    exit /b 1
-)
-
-set HAS_MEM=0
-set HAS_LOWRAM=0
-set NO_LOWRAM=0
-set HAS_SNAP=0
-set AVD_NAME=
-
-set PREV=
-for %%%%A in (%%*) do (
-    if "%%%%~A"=="-memory" set HAS_MEM=1
-    if "%%%%~A"=="-lowram" set HAS_LOWRAM=1
-    if "%%%%~A"=="--no-lowram" set NO_LOWRAM=1
-    if "%%%%~A"=="-no-lowram" set NO_LOWRAM=1
-    if "%%%%~A"=="--no-slim" set NO_SLIM=1
-    if "%%%%~A"=="-no-slim" set NO_SLIM=1
-    if "%%%%~A"=="--headless" set HEADLESS=1
-    if "%%%%~A"=="-no-window" set HEADLESS=1
-    if "%%%%~A"=="-snapshot" set HAS_SNAP=1
-    if "%%%%~A"=="-no-snapshot" set HAS_SNAP=1
-    if "%%%%~A"=="--cold" set HAS_SNAP=1
-    if "!PREV!"=="-avd" set "AVD_NAME=%%%%~A"
-    set "PREV=%%%%~A"
-)
-
-set EXTRA=
-if !NO_SLIM! EQU 0 (
-    if !HAS_MEM! EQU 0 set EXTRA=!EXTRA! -memory %d
-    if !HAS_LOWRAM! EQU 0 if !NO_LOWRAM! EQU 0 set EXTRA=!EXTRA! -lowram
-    if !HEADLESS! EQU 1 set EXTRA=!EXTRA! -no-window
-    if !HAS_SNAP! EQU 0 if defined AVD_NAME (
-        if exist "%%USERPROFILE%%\.android\avd\!AVD_NAME!.avd\snapshots\avdslim_clean" (
-            set EXTRA=!EXTRA! -snapshot avdslim_clean -no-snapshot-save
-        )
-    )
-    set EXTRA=!EXTRA! -no-audio -camera-back none -camera-front none
-)
-
-"!REAL_EMU!" !EXTRA! %%*
-`, shimHeader, defaultRam)
-	} else {
-		// ponytail: --ram in the defaults file wins at launch, so changing it needs no reinstall.
-		script = fmt.Sprintf(`#!/bin/bash
+	// ponytail: --ram in the defaults file wins at launch, so changing it needs no reinstall.
+	script := fmt.Sprintf(`#!/bin/bash
 %s — transparently injects low-memory flags
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REAL_EMU="$DIR/emulator.real"
@@ -227,7 +214,6 @@ fi
 
 exec "$REAL_EMU" "${EXTRA[@]}" "$@"
 `, shimHeader, shellQuote(config.DefaultsFilePath()), defaultRam)
-	}
 
 	if err := os.WriteFile(emuPath, []byte(script), 0755); err != nil {
 		return err

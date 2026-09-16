@@ -745,6 +745,7 @@ func handleWatch(client *adb.Client, args []string) {
 	if len(skip) > 0 {
 		fmt.Printf("   Leaving settings unchanged: %s\n", strings.Join(sortedKeys(skip), ", "))
 	}
+	warnIfShimOverwritten()
 	fmt.Println("   Monitoring for newly booted Android emulators in the background.")
 	fmt.Println("   Will automatically apply low-memory optimizations as soon as emulators boot.")
 	fmt.Println("   Press Ctrl+C to stop.")
@@ -793,6 +794,7 @@ func handleWatch(client *adb.Client, args []string) {
 				}
 
 				fmt.Printf("\n✨ [%s] Emulator booted! Automatically applying avdslim...\n", emu.Serial)
+				warnIfShimOverwritten()
 				count, _ := client.Slim(emu.Serial, aggressive, keepPackages, skip)
 				fmt.Printf("✓ [%s] Successfully slimmed! Disabled %d packages, trimmed RAM.\n\n", emu.Serial, count)
 				slimmedDevices[emu.Serial] = true
@@ -874,6 +876,7 @@ func handleInstallShim(args []string) {
 	fmt.Println("   • From now on, launching emulators via Android Studio 'Play' button")
 	fmt.Printf("     will automatically inject -memory %d -lowram -no-audio flags.\n", ramMb)
 	fmt.Printf("   • A --ram=<MB> line in %s overrides this at launch.\n", config.DefaultsFilePath())
+	fmt.Println("   • After an emulator update in Android Studio, run `avdslim install-shim` again.")
 	fmt.Println("   • To restore stock Android Studio emulator behavior anytime:")
 	fmt.Println("     avdslim uninstall-shim")
 	fmt.Println()
@@ -1234,4 +1237,12 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// warnIfShimOverwritten flags an Android Studio emulator update that replaced the shim.
+func warnIfShimOverwritten() {
+	if shim.IsShimOverwritten() {
+		fmt.Println("⚠️  An emulator update replaced the avdslim shim, so Android Studio launches are no longer slimmed.")
+		fmt.Println("   Run: avdslim install-shim")
+	}
 }

@@ -37,8 +37,11 @@ guest, or live emulator flags.
   `install-shim` (CLI flags win). The shim reads `--ram` from it at launch.
   Owner: `internal/config/defaults.go`.
 - **Shim marker** — SDK `emulator/` dir holds either stock binary or
-  (`emulator.real` binary + `emulator` shell/batch script containing
-  `# avdslim emulator shim`). `IsShimInstalled` checks both.
+  (`emulator.real` binary + `emulator` bash script containing
+  `# avdslim emulator shim`). `IsShimInstalled` checks both;
+  `IsShimOverwritten` = `emulator.real` present but `emulator` isn't the
+  script (an SDK emulator update replaced it). Unix only: `InstallShim`
+  refuses on Windows.
 
 ## Ownership boundaries
 
