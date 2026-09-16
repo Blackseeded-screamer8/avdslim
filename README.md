@@ -6,6 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Report Card](https://goreportcard.com/badge/github.com/kdbhalala/avdslim)](https://goreportcard.com/report/github.com/kdbhalala/avdslim)
 [![Release](https://img.shields.io/github/v/release/kdbhalala/avdslim)](https://github.com/kdbhalala/avdslim/releases)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-AVD--SLIM-blue?logo=github-actions&logoColor=white)](https://github.com/marketplace/actions/avd-slim-android-emulator-ram-ci-optimizer)
 
 `avdslim` is a lightweight, zero-dependency CLI tool that reduces Android Virtual Device (AVD) host memory consumption from **~8 GB down to ~1.5 GB** and cuts idle CPU overhead to near-zero on Apple Silicon & Linux.
 
@@ -302,12 +303,13 @@ avdslim profiles
 ---
 
 ## ☁️ GitHub Actions CI Integration
+Official GitHub Marketplace Action: **[AVD-SLIM — Android Emulator RAM & CI Optimizer](https://github.com/marketplace/actions/avd-slim-android-emulator-ram-ci-optimizer)**
 
 Slash CI runner memory and run parallel emulator shards on free GitHub Actions runners:
 
 ```yaml
-- name: Setup AVD-SLIM
-  uses: kdbhalala/avdslim@main
+- name: AVD-SLIM — Android Emulator RAM & CI Optimizer
+  uses: kdbhalala/avdslim@v1
   with:
     ram: '1024'
     install-shim: 'true'
