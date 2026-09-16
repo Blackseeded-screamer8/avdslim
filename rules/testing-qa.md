@@ -3,8 +3,8 @@
 ## Commands (all verified in `Makefile` / `release.yml`)
 
 - `go build ./...` / `make build` → `bin/avdslim` (`-s -w` ldflags, version
-  injected via `-X main.version`; `VERSION=1.0.5` in `Makefile` — bump together
-  with the `version` const in `cmd/avdslim/main.go` and `install.sh`).
+  injected via `-X main.version`; `VERSION=1.0.6` in `Makefile` — bump together
+  with the `version` var in `cmd/avdslim/main.go` and `install.sh`).
 - `go vet ./...` — run before any PR; no lint config exists.
 - `go test ./...` / `make test` — one test: `internal/adb/client_test.go`
   checks Slim/Restore are exact inverses against a fake bash `adb`
