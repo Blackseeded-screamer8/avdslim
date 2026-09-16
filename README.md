@@ -3,124 +3,181 @@
 > **Android Emulator RAM & CPU Optimizer**  
 > *Inspired by [MobAI-App/simslim](https://github.com/MobAI-App/simslim) for iOS simulators.*
 
-`avdslim` is a lightweight, zero-dependency CLI tool that reduces Android Virtual Device (AVD) host memory consumption by **50% to 75%** and cuts idle CPU overhead to near-zero.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kdbhalala/avdslim)](https://goreportcard.com/report/github.com/kdbhalala/avdslim)
+[![Release](https://img.shields.io/github/v/release/kdbhalala/avdslim)](https://github.com/kdbhalala/avdslim/releases)
+
+`avdslim` is a lightweight, zero-dependency CLI tool that reduces Android Virtual Device (AVD) host memory consumption from **~8 GB down to ~1.5 GB** and cuts idle CPU overhead to near-zero on Apple Silicon & Linux.
 
 ---
 
 ## 🎯 The Problem
 
-When running an Android Emulator (especially Google APIs images), macOS allocates **3 GB to 5 GB of RAM** to `qemu-system-aarch64`. Inside the guest OS, dozens of background daemons consume CPU and dirty memory pages:
-- **Google Assistant / Search** (`com.google.android.googlequicksearchbox`): ~250–400 MB RAM
-- **Android System Intelligence** (`com.google.android.as`): ~150–250 MB RAM
-- **Consumer bloat** (Photos, YouTube, Maps, Gmail, Music): ~200–300 MB RAM
-- **Telephony & accessibility daemons**: ~100–150 MB RAM
-- **Unrestricted cached background processes & 60fps window animations**
+When developing Android apps on macOS or Linux, developers often discover `qemu-system-aarch64` consuming **5 GB to 8+ GB of RAM** in Activity Monitor.
 
-This causes MacBook fans to spin, freezes IDEs, and exhausts system memory.
+### Why Does the Emulator Consume 8 GB?
+1. **The Lavapipe Trap**: Android Studio frequently defaults `hw.gpu.mode = auto`, which falls back to Mesa CPU software rasterization (`lavapipe`). This allocates **~4 GB of software rendering buffers** directly in host RAM on top of the guest OS RAM.
+2. **16 KB Page Size Images**: On modern ARM64 images (`google_apis_ps16k`), QEMU hardcodes a minimum RAM threshold (`minRam = 4096MB`), silently overriding lower RAM settings.
+3. **Android Bloatware**: Over 35 non-essential daemons (Google Assistant, System Intelligence, Maps, Photos, YouTube, telemetry) wake CPU cores and pollute memory.
+4. **Stale Snapshots**: Android Studio re-loads cached snapshots (`hardware-qemu.ini`) that preserve heavy 4 GB states across reboots.
 
 ---
 
 ## 💡 The Solution
 
-Just like `simslim` disables background daemons on iOS simulators via `launchctl`, `avdslim`:
-1. **Disables 35+ non-essential background daemons** via `adb shell pm disable-user --user 0`.
-2. **Eliminates GPU frame-buffer churn** by disabling window, transition, and animator scales (0x).
-3. **Restricts background process limits** (`background_process_limit = 2`).
-4. **Disables account auto-sync and location polling**.
-5. **Trims heap allocations** (`am trim-memory --all COMPLETE`) and drops kernel pagecaches (`/proc/sys/vm/drop_caches`).
-6. **Tunes host AVD `config.ini`** to low-memory defaults (1536M RAM, no camera/audio host threads, Metal hardware acceleration).
+Just like `simslim` silences iOS simulators via `launchctl`, `avdslim`:
+1. **Passes `-lowram` to QEMU**: Removes the internal 4 GB lower bound and boots the Android kernel in low-RAM mode (`hw.ramSize = 1024M` or `1536M`).
+2. **Enforces Metal GPU Acceleration**: Forces `-gpu host` to render natively via Apple Silicon Metal, completely bypassing CPU software rasterizers.
+3. **Disables 27+ Bloat Daemons**: Silences non-essential Google background services via `pm disable-user --user 0`.
+4. **Eliminates Animation Lag**: Sets window, transition, and animator scales to 0x.
+5. **Limits Background Churn**: Caps `background_process_limit = 2` and disables auto-sync.
+6. **Drops Caches**: Flushes Linux page caches and compacts memory heaps.
 
 > **What stays working?**  
-> Core Android OS, WebView, Flutter/React-Native/Native runtimes, network, and Google Play Services core APIs (Firebase Auth, Cloud Messaging / FCM push notifications).
+> Core Android OS, WebView, Flutter / React Native / Kotlin / Compose runtimes, network stack, and core Google Play Services APIs (Firebase Auth, Cloud Messaging / FCM push notifications).
 
 ---
 
-## 📊 Go vs Rust Head-to-Head Benchmark
+## 📊 Memory Footprint Breakdown
 
-Both Go and Rust implementations were built and benchmarked:
+| Stage | Activity Monitor (`phys_footprint`) | Active Dirty RAM (`footprint`) | Reclaimed |
+| :--- | :--- | :--- | :--- |
+| **Default Stock Emulator** (Pixel 10 Pro) | **8,518 MB (8.5 GB)** | ~6,500 MB | Baseline |
+| **With `avdslim launch` (`-lowram`, Metal GPU)** | **2,498 MB (2.5 GB)** | **1,560 MB (1.5 GB)** | **~6.0 GB saved (71%)** |
+| **Standard 1080p Profile** (Pixel 5) | **2,325 MB (2.3 GB)** | **1,306 MB (1.3 GB)** | **~6.2 GB saved (73%)** |
 
-| Metric | Go (Winner) | Rust | Notes |
-|---|---|---|---|
-| **Binary Size** | **2.6 MB** | **0.44 MB** | Rust is ~6x smaller, but 2.6 MB is negligible. |
-| **Startup Latency** | **2.61 ms** | **2.08 ms** | Imperceptible ~0.5ms difference. |
-| **Incremental Build Time** | **206 ms** | **3,088 ms** | Go builds ~10x faster. |
-| **External Dependencies** | **0 (100% Stdlib)** | 11 crates | Go has zero third-party dependencies. |
-| **Cross-Compilation** | **Native (1 command)** | Complex (needs linkers) | Go builds for Mac/Linux/Windows out of the box. |
-
-**Winner**: **Go**. Zero third-party dependencies, instant builds, and native cross-compilation for all platforms without external toolchains make Go the clear winner for developer tooling distribution. *(The Rust implementation is archived in `rust_comparison/` for reference.)*
+> **Note on Activity Monitor vs Dirty RAM**:  
+> macOS Activity Monitor reports `phys_footprint` from Apple's Mach kernel ledger. This includes ~530 MB of compressed pages from the initial boot spike and Metal GPU display pipeline buffers. The actual dirty physical memory held in RAM is **~1.5 GB** (verified with `footprint -p <pid>`).
 
 ---
 
 ## 🚀 Installation
 
-### Option 1: Build from Source (Go 1.22+)
+### Option 1: Homebrew (macOS / Linux)
 ```bash
-git clone https://github.com/krunalbhalala/avdslim.git
+brew install kdbhalala/tap/avdslim
+```
+
+### Option 2: Go Install
+```bash
+go install github.com/kdbhalala/avdslim/cmd/avdslim@latest
+```
+
+### Option 3: Pre-built Binaries
+Download pre-compiled binaries from [GitHub Releases](https://github.com/kdbhalala/avdslim/releases):
+* macOS Apple Silicon: `avdslim_*_darwin_arm64.tar.gz`
+* macOS Intel: `avdslim_*_darwin_amd64.tar.gz`
+* Linux: `avdslim_*_linux_amd64.tar.gz` / `avdslim_*_linux_arm64.tar.gz`
+
+### Option 4: Build from Source (100% Stdlib, Zero Dependencies)
+```bash
+git clone https://github.com/kdbhalala/avdslim.git
 cd avdslim
 make install
 ```
 
-### Option 2: Pre-built Binary
-Download the binary for your platform from Releases:
-* macOS Apple Silicon: `avdslim-darwin-arm64`
-* macOS Intel: `avdslim-darwin-amd64`
-* Linux: `avdslim-linux-amd64`
-* Windows: `avdslim-windows-amd64.exe`
+---
+
+## 🛠️ Usage
+
+### 1. Watch Mode (`watch`) — True Frictionless Experience
+Run the watcher once in the background. It monitors for newly booted emulators and automatically applies low-memory optimizations as soon as they boot:
+```bash
+avdslim watch
+```
+*(You can also pass `--aggressive` or `--keep=<package>`)*.
 
 ---
 
-## 🛠️ Usage & Commands
-
-### 1. List Emulators & AVDs
-List all running emulators with their macOS Activity Monitor memory footprint, RSS, and slimmed status:
-```bash
-avdslim list
-```
-
-### 2. Measure Memory Footprint
-Deep memory profiling showing macOS Activity Monitor memory footprint (`phys_footprint`), uncompressed physical RSS, and in-guest process breakdown:
+### 2. Deep Memory Breakdown (`measure`)
+Inspect host macOS memory (`phys_footprint`, resident RSS) alongside the guest Android `dumpsys meminfo`:
 ```bash
 avdslim measure
-# Or specify device:
+# Or specify serial:
 avdslim measure emulator-5554
 ```
 
-### 3. Slim Down Emulator (`on`)
-Disables bloat packages, zeroes animation latency, limits background processes, and trims RAM:
+---
+
+### 3. Slim an Active Emulator (`on`)
+Immediately silences background bloat and trims memory on a running emulator:
 ```bash
+# Standard preset (safe for all apps):
 avdslim on
-# Optional aggressive mode (also disables Play Store updater & Chrome background sync):
+
+# Aggressive preset (also disables Play Store self-updater):
 avdslim on --aggressive
+
+# Keep a specific app (e.g. Google Maps):
+avdslim on --keep=com.google.android.apps.maps
 ```
 
-### 4. Restore to Stock (`off`)
-Restores all disabled packages and default settings anytime:
+---
+
+### 4. Restore Stock Emulator (`off`)
+Restores all disabled packages, animations (1.0x), and default background limits:
 ```bash
 avdslim off
 ```
 
-### 5. Tune Host AVD Config (`tune-avd`)
-Directly edits `~/.android/avd/<name>.avd/config.ini` to safe low-memory settings, purges stale runtime cache/snapshots (which would otherwise restore 4GB/software-rendering state):
+---
+
+### 5. Tune Host AVD Configuration (`tune-avd`)
+Configures an AVD's `config.ini` for optimal memory consumption and purges stale snapshots:
 ```bash
 avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
 ```
-* Sets `hw.ramSize = 1536` (instead of 2048/4096 MB)
-* Sets `vm.heapSize = 256`
-* Disables audio and camera host emulation threads (`hw.camera.back = none`, `hw.audioInput = no`)
-* Forces Metal GPU hardware acceleration (`hw.gpu.mode = host`)
-* Disables FastBoot snapshots (`fastboot.forceColdBoot = yes`) so low-memory settings apply cleanly
+* Sets `hw.ramSize = 1536` (or 1024)
+* Sets `hw.gpu.mode = host` (Apple Silicon Metal hardware acceleration)
+* Disables camera and audio emulation threads
+* Purges stale `hardware-qemu.ini` and snapshots
 
-### 6. Restart Running Emulator with Low-Memory Flags (`restart`)
-Gracefully terminates the emulator, purges stale `hardware-qemu.ini` / snapshot state, and relaunches with `-lowram`, `-memory 1536`, and `-gpu host`:
+---
+
+### 6. Restart Emulator with Clean Cache (`restart`)
+Gracefully shuts down the emulator, purges stale runtime snapshots, and relaunches with low-memory host flags:
 ```bash
-avdslim restart emulator-5554
+avdslim restart emulator-5554 --ram=1536
 ```
 
-### 7. Launch with Low-Memory Host Flags (`launch`)
-Spawns the emulator with low-memory host flags (`-lowram`, `-gpu host`, `-no-snapshot-load`, `-no-audio`) and optionally auto-slims once booted:
+---
+
+### 7. Launch Emulator (`launch`)
+Starts an AVD with `-lowram -gpu host -no-snapshot-load` and automatically slims upon boot:
 ```bash
 avdslim launch Pixel_10_Pro --slim --ram=1536
 ```
+
+---
+
+### 8. Environment Doctor (`doctor`)
+Audits your Android toolchain, active AVDs, 16K page size overhead, and warns about software GPU fallback:
+```bash
+avdslim doctor
+```
+
+---
+
+### 9. View Bloat Profiles (`profiles`)
+Inspects the list of disabled packages categorized by function (Assistant, Telephony, Consumer Bloat, etc.) and guaranteed core services:
+```bash
+avdslim profiles
+```
+
+---
+
+## ⚡ Benchmark: Go vs Rust
+
+Both Go and Rust implementations were benchmarked in `bench/`:
+
+| Metric | Go (Winner) | Rust |
+|---|---|---|
+| **Startup Latency** | **2.61 ms** | **2.08 ms** |
+| **Incremental Build Time** | **206 ms** | **3,088 ms** |
+| **External Dependencies** | **0 (100% Stdlib)** | 11 crates |
+| **Cross-Compilation** | **Native out-of-the-box** | Requires target toolchains & linkers |
+
+**Verdict**: Go was selected for its zero-dependency standard library and instant cross-compilation.
 
 ---
 

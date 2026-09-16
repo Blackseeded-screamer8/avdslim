@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/krunalbhalala/avdslim/internal/adb"
@@ -45,6 +47,8 @@ func main() {
 		handleOn(client, subArgs)
 	case "off", "unslim":
 		handleOff(client, subArgs)
+	case "watch":
+		handleWatch(client, subArgs)
 	case "tune-avd", "tune":
 		handleTuneAvd(subArgs)
 	case "launch":
@@ -74,6 +78,8 @@ Commands:
                        Options: --aggressive (also disables Play Store updater)
                                 --keep=<package> (preserve specific package, e.g. Maps)
   off [device]         Restore disabled packages and default settings
+  watch                Auto-detect & slim new emulators as soon as they boot
+                       Options: --aggressive, --keep=<package>
   tune-avd [avd_name]  Tune host AVD config.ini (RAM=1536M, Metal GPU, no cameras)
                        Options: --ram=<MB> (default: 1536), --heap=<MB> (default: 256)
   launch <avd_name>    Launch AVD with low-memory host flags (-lowram, -memory, etc.)
@@ -85,6 +91,7 @@ Commands:
   version              Print avdslim version
 
 Examples:
+  avdslim watch
   avdslim doctor
   avdslim list
   avdslim measure
@@ -418,3 +425,83 @@ func findEmulator() string {
 	}
 	return "emulator"
 }
+
+func handleWatch(client *adb.Client, args []string) {
+	aggressive := false
+	var keepPackages []string
+	for _, a := range args {
+		if a == "--aggressive" {
+			aggressive = true
+		} else if strings.HasPrefix(a, "--keep=") {
+			pkg := strings.TrimPrefix(a, "--keep=")
+			if pkg != "" {
+				keepPackages = append(keepPackages, pkg)
+			}
+		}
+	}
+
+	preset := "Standard"
+	if aggressive {
+		preset = "Aggressive"
+	}
+
+	fmt.Println("👀 AVD-SLIM Watcher active...")
+	fmt.Printf("   Preset: %s\n", preset)
+	if len(keepPackages) > 0 {
+		fmt.Printf("   Preserving packages: %s\n", strings.Join(keepPackages, ", "))
+	}
+	fmt.Println("   Monitoring for newly booted Android emulators in the background.")
+	fmt.Println("   Will automatically apply low-memory optimizations as soon as emulators boot.")
+	fmt.Println("   Press Ctrl+C to stop.\n")
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	slimmedDevices := make(map[string]bool)
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-sigChan:
+			fmt.Println("\n👋 Stopping AVD-SLIM watcher. Goodbye!")
+			return
+		case <-ticker.C:
+			emulators, err := client.GetRunningEmulators()
+			if err != nil {
+				continue
+			}
+
+			// Clean up devices that were turned off / disconnected
+			currentMap := make(map[string]bool)
+			for _, emu := range emulators {
+				currentMap[emu.Serial] = true
+			}
+			for serial := range slimmedDevices {
+				if !currentMap[serial] {
+					delete(slimmedDevices, serial)
+				}
+			}
+
+			for _, emu := range emulators {
+				if slimmedDevices[emu.Serial] || emu.IsSlimmed {
+					slimmedDevices[emu.Serial] = true
+					continue
+				}
+
+				// Check if boot completed
+				res, _ := client.Exec("-s", emu.Serial, "shell", "getprop", "sys.boot_completed")
+				if strings.TrimSpace(res) != "1" {
+					fmt.Printf("⏳ [%s] Emulator detected, waiting for boot completion...\n", emu.Serial)
+					continue
+				}
+
+				fmt.Printf("\n✨ [%s] Emulator booted! Automatically applying avdslim...\n", emu.Serial)
+				count, _ := client.Slim(emu.Serial, aggressive, keepPackages)
+				fmt.Printf("✓ [%s] Successfully slimmed! Disabled %d packages, trimmed RAM.\n\n", emu.Serial, count)
+				slimmedDevices[emu.Serial] = true
+			}
+		}
+	}
+}
+
