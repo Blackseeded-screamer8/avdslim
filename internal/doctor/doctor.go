@@ -81,14 +81,24 @@ func RunDoctor(client *adb.Client) {
 
 			fmt.Printf("   • AVD: %s (Target: %s)\n", name, target)
 
-			// Check 16 KB Page Size
-			if strings.Contains(tag, "page_size_16kb") || strings.Contains(avd["image.sysdir.1"], "ps16k") {
-				fmt.Println("     ⚠️  16 KB Page Size image detected!")
-				fmt.Println("        -> 16K images enforce 4GB minimum RAM and 4x larger page buffers.")
-				fmt.Println("        -> Tip: For daily Flutter/Android dev, standard 4K 'Google APIs' images use 60% less RAM.")
+			// Check System Image Type & Recommendation
+			is16K := strings.Contains(tag, "page_size_16kb") || strings.Contains(avd["image.sysdir.1"], "ps16k") || strings.Contains(avd["image.sysdir.1"], "16kb")
+			isPlayStore := strings.ToLower(avd["PlayStore.enabled"]) == "true" || strings.ToLower(avd["PlayStore.enabled"]) == "yes" || strings.Contains(tag, "playstore") || strings.Contains(avd["tag.id"], "playstore")
+
+			if is16K {
+				fmt.Println("     🚨 [AVOID] 16 KB Page Size Image Detected!")
+				fmt.Println("        -> QEMU enforces 4GB minimum RAM ceiling for 16K images, ignoring low-RAM flags.")
+				fmt.Println("        -> Allocates 4x larger page buffers in host memory.")
+				fmt.Println("        -> 💡 Recommendation: In SDK Manager, switch to standard 'Google APIs' (4 KB) image.")
+				issuesCount++
+			} else if isPlayStore {
+				fmt.Println("     ⚠️  [AVOID] 'Google Play' Production Image Detected")
+				fmt.Println("        -> Runs heavy Play Store auto-updater daemons and background security scans.")
+				fmt.Println("        -> Production build locks out `adb root` (cannot drop Linux kernel dirty pagecaches).")
+				fmt.Println("        -> 💡 Recommendation: Use 'Google APIs' image instead (100% Firebase/FCM, 40% less RAM, adb root enabled).")
 				issuesCount++
 			} else {
-				fmt.Println("     ✓ Standard 4 KB memory pages (optimal)")
+				fmt.Println("     ✅ [OPTIMAL] 'Google APIs' (Standard 4 KB pages, Firebase/FCM enabled, adb root capable)")
 			}
 
 			// Check RAM allocation
@@ -164,6 +174,26 @@ func RunDoctor(client *adb.Client) {
 		}
 		fmt.Println()
 	}
+
+	// 4. Golden SDK Recommendation Banner
+	fmt.Println("💡 4. Golden SDK System Image Recommendation:")
+	fmt.Println("┌────────────────────────────────────────────────────────────────────────┐")
+	fmt.Println("│  When creating AVDs in Android Studio Device Manager:                  │")
+	fmt.Println("│                                                                        │")
+	fmt.Println("│  ✅ ALWAYS CHOOSE: \"Google APIs\" (Standard 4 KB pages)                 │")
+	fmt.Println("│     • 100% Firebase Auth, FCM Push, Google Sign-In & Maps support       │")
+	fmt.Println("│     • Guest root (`adb root`) enabled for instant kernel cache drops   │")
+	fmt.Println("│     • Runs smoothly with 1024 MB RAM (saves 60-70% host memory)        │")
+	fmt.Println("│                                                                        │")
+	fmt.Println("│  ❌ AVOID: \"Google Play\"                                               │")
+	fmt.Println("│     • Adds heavy Play Store self-updaters & Play Protect scanning loops│")
+	fmt.Println("│     • Production build locks out `adb root`                            │")
+	fmt.Println("│                                                                        │")
+	fmt.Println("│  ❌ AVOID: \"16 KB Page Size\" (ps16k)                                   │")
+	fmt.Println("│     • Hardcodes 4096 MB minimum RAM ceiling in QEMU                    │")
+	fmt.Println("│     • 4x larger page buffers consume 2.5x more host memory              │")
+	fmt.Println("└────────────────────────────────────────────────────────────────────────┘")
+	fmt.Println()
 
 	// Summary
 	fmt.Println("══════════════════════════════════════════════════════════════")

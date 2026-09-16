@@ -35,6 +35,18 @@ The #1 fear with debloating tools is silent breakage. `avdslim` is designed to b
 
 ---
 
+## 💡 Golden SDK Recommendation: Which System Image to Choose?
+
+When creating Virtual Devices in **Android Studio Device Manager**, your choice of system image makes an enormous difference in RAM consumption:
+
+| System Image Type | Status | Why? |
+| :--- | :---: | :--- |
+| **Google APIs** *(Standard 4 KB)* | ✅ **ALWAYS USE (Best)** | **100% Firebase Auth, FCM Push & Maps active** with zero Play Store background updaters. Allows `adb root` so `avdslim` can compact kernel memory. **Runs ultra-smooth at 1024 MB RAM**. |
+| **Google Play** | ❌ **AVOID** | Runs heavy Play Store self-updaters and background Play Protect scanning loops. Production build locks out `adb root` (cannot flush kernel caches). Consumes ~40% more RAM. |
+| **16 KB Page Size** *(`ps16k`)* | ❌ **AVOID** | Hardcodes a **4,096 MB minimum RAM ceiling in QEMU** (ignoring low-memory flags). Uses 4x larger page buffers. Only use if specifically debugging 16K native C/C++ alignment. |
+
+---
+
 ## 🎯 The Problem
 
 When developing Android apps on macOS or Linux, developers often discover `qemu-system-aarch64` consuming **5 GB to 8+ GB of RAM** in Activity Monitor.
