@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/krunalbhalala/avdslim/internal/adb"
+	"github.com/krunalbhalala/avdslim/internal/bloat"
 	"github.com/krunalbhalala/avdslim/internal/config"
+	"github.com/krunalbhalala/avdslim/internal/doctor"
 	"github.com/krunalbhalala/avdslim/internal/host"
 )
 
@@ -31,6 +33,10 @@ func main() {
 		printUsage()
 	case "version", "-v", "--version":
 		fmt.Printf("avdslim version %s\n", version)
+	case "doctor":
+		doctor.RunDoctor(client)
+	case "profiles":
+		bloat.PrintProfiles()
 	case "list":
 		handleList(client)
 	case "measure":
@@ -66,6 +72,7 @@ Commands:
   measure [device]     Deep memory breakdown (host Footprint/RSS + guest dumpsys)
   on [device]          Slim down emulator: disable bloat daemons & trim RAM
                        Options: --aggressive (also disables Play Store updater)
+                                --keep=<package> (preserve specific package, e.g. Maps)
   off [device]         Restore disabled packages and default settings
   tune-avd [avd_name]  Tune host AVD config.ini (RAM=1536M, Metal GPU, no cameras)
                        Options: --ram=<MB> (default: 1536), --heap=<MB> (default: 256)
@@ -73,15 +80,18 @@ Commands:
                        Options: --slim (auto-slim once booted), --ram=<MB>
   restart [device]     Gracefully restart emulator with clean cache, low-memory flags
                        Options: --ram=<MB> (default: 1536)
+  doctor               Audit environment, AVDs, system image 16K overhead & toolchain
+  profiles             List all bloat categories, packages & guaranteed-working services
   version              Print avdslim version
 
 Examples:
+  avdslim doctor
   avdslim list
   avdslim measure
   avdslim on --aggressive
+  avdslim on --keep=com.google.android.apps.maps
   avdslim tune-avd Pixel_10_Pro --ram=1536
-  avdslim restart emulator-5554
-  avdslim launch Pixel_10_Pro --slim --ram=1536
+  avdslim restart
 `, version)
 }
 
@@ -167,9 +177,15 @@ func handleMeasure(client *adb.Client, args []string) {
 func handleOn(client *adb.Client, args []string) {
 	aggressive := false
 	filteredArgs := make([]string, 0, len(args))
+	var keepPackages []string
 	for _, a := range args {
 		if a == "--aggressive" {
 			aggressive = true
+		} else if strings.HasPrefix(a, "--keep=") {
+			pkg := strings.TrimPrefix(a, "--keep=")
+			if pkg != "" {
+				keepPackages = append(keepPackages, pkg)
+			}
 		} else {
 			filteredArgs = append(filteredArgs, a)
 		}
@@ -187,6 +203,10 @@ func handleOn(client *adb.Client, args []string) {
 	}
 	fmt.Printf("⚡ Slimming Android Emulator (%s) [preset: %s]...\n\n", serial, presetName)
 
+	if len(keepPackages) > 0 {
+		fmt.Printf("   Preserving requested package(s): %s\n", strings.Join(keepPackages, ", "))
+	}
+
 	hostPid := host.FindHostPidForSerial(serial)
 	beforeFootprint := 0
 	beforeRss := 0
@@ -196,7 +216,7 @@ func handleOn(client *adb.Client, args []string) {
 	}
 
 	fmt.Println("1. Disabling non-essential background daemons:")
-	count, _ := client.Slim(serial, aggressive)
+	count, _ := client.Slim(serial, aggressive, keepPackages)
 	fmt.Printf("   -> Successfully disabled %d packages.\n\n", count)
 
 	fmt.Println("2. Tuned system settings (animations 0x, background limit 2, sync off).")

@@ -102,13 +102,18 @@ func (c *Client) ResolveDevice(args []string) (string, error) {
 	return "", fmt.Errorf("device serial required")
 }
 
-func (c *Client) Slim(serial string, aggressive bool) (int, error) {
+func (c *Client) Slim(serial string, aggressive bool, keepPackages []string) (int, error) {
 	targetPackages := make([]string, 0, 50)
 	for _, pkgs := range bloat.StandardBloatCategories {
 		targetPackages = append(targetPackages, pkgs...)
 	}
 	if aggressive {
 		targetPackages = append(targetPackages, bloat.AggressiveBloatPackages...)
+	}
+
+	keepMap := make(map[string]bool)
+	for _, k := range keepPackages {
+		keepMap[k] = true
 	}
 
 	installedRaw, _ := c.Exec("-s", serial, "shell", "pm", "list", "packages")
@@ -122,7 +127,7 @@ func (c *Client) Slim(serial string, aggressive bool) (int, error) {
 
 	disabledList := make([]string, 0, len(targetPackages))
 	for _, pkg := range targetPackages {
-		if !installedMap[pkg] {
+		if !installedMap[pkg] || keepMap[pkg] {
 			continue
 		}
 		res, _ := c.Exec("-s", serial, "shell", "pm", "disable-user", "--user", "0", pkg)

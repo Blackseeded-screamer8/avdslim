@@ -1,5 +1,7 @@
 package bloat
 
+import "fmt"
+
 // StandardBloatCategories lists non-essential background packages safe to disable
 // for everyday Android / Flutter development.
 // Core OS functionality, WebView, Flutter runtime, networking, and Google Play
@@ -63,4 +65,31 @@ var AggressiveBloatPackages = []string{
 	"com.google.android.partnersetup",
 	"com.google.android.setupwizard",
 	"com.android.setupwizard",
+}
+
+func PrintProfiles() {
+	fmt.Println("📋 AVD-SLIM Slimming Categories & Packages:\n")
+
+	for category, pkgs := range StandardBloatCategories {
+		fmt.Printf("📦 %s:\n", category)
+		for _, pkg := range pkgs {
+			fmt.Printf("   • %s\n", pkg)
+		}
+		fmt.Println()
+	}
+
+	fmt.Println("🔥 Aggressive Mode Additional Packages (via `avdslim on --aggressive`):")
+	for _, pkg := range AggressiveBloatPackages {
+		fmt.Printf("   • %s\n", pkg)
+	}
+	fmt.Println()
+
+	fmt.Println("🔒 GUARANTEED FUNCTIONAL (Never Disabled):")
+	fmt.Println("   ✓ Core Android OS & SystemUI")
+	fmt.Println("   ✓ Android System WebView & JavaScript Runtimes")
+	fmt.Println("   ✓ Flutter / React Native / Native APK execution")
+	fmt.Println("   ✓ TCP/UDP Network Sockets, DNS & Localhost Port Forwarding")
+	fmt.Println("   ✓ Google Play Services Core APIs (Firebase Auth, Cloud Messaging / FCM, Maps SDK)")
+	fmt.Println("   ✓ Apple Silicon Metal GPU Hardware Acceleration")
+	fmt.Println()
 }
