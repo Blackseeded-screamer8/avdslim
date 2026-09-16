@@ -9,8 +9,7 @@ import (
 )
 
 func GetInstalledAvds() []map[string]string {
-	homeDir, _ := os.UserHomeDir()
-	avdBase := filepath.Join(homeDir, ".android", "avd")
+	avdBase := GetAvdBaseDir()
 
 	var list []map[string]string
 	entries, err := os.ReadDir(avdBase)
@@ -42,9 +41,8 @@ func GetInstalledAvds() []map[string]string {
 	return list
 }
 
-func TuneAvd(targetAvd string, ramMb, heapMb int) error {
-	homeDir, _ := os.UserHomeDir()
-	avdBase := filepath.Join(homeDir, ".android", "avd")
+func TuneAvd(targetAvd string, ramMb, heapMb int, gpuMode string) error {
+	avdBase := GetAvdBaseDir()
 
 	var configFiles []string
 	filepath.Walk(avdBase, func(path string, info os.FileInfo, err error) error {
@@ -55,7 +53,7 @@ func TuneAvd(targetAvd string, ramMb, heapMb int) error {
 	})
 
 	if len(configFiles) == 0 {
-		return fmt.Errorf("no AVD configurations found in ~/.android/avd")
+		return fmt.Errorf("no AVD configurations found in %s", avdBase)
 	}
 
 	var fileToTune string
@@ -105,13 +103,17 @@ func TuneAvd(targetAvd string, ramMb, heapMb int) error {
 		}
 	}
 
+	if gpuMode == "" {
+		gpuMode = GetRecommendedGpuMode()
+	}
+
 	kv["hw.ramSize"] = strconv.Itoa(ramMb)
 	kv["vm.heapSize"] = strconv.Itoa(heapMb)
 	kv["hw.camera.back"] = "none"
 	kv["hw.camera.front"] = "none"
 	kv["hw.audioInput"] = "no"
 	kv["hw.audioOutput"] = "no"
-	kv["hw.gpu.mode"] = "host"
+	kv["hw.gpu.mode"] = gpuMode
 	kv["hw.gpu.enabled"] = "yes"
 	kv["hw.dPad"] = "no"
 	kv["fastboot.forceColdBoot"] = "yes"
@@ -136,7 +138,7 @@ func TuneAvd(targetAvd string, ramMb, heapMb int) error {
 	fmt.Printf("   • Host RAM allocated: %d MB (prevents host memory pressure)\n", ramMb)
 	fmt.Printf("   • VM Heap: %d MB\n", heapMb)
 	fmt.Println("   • Hardware Audio & Camera: disabled (saves host threads/buffers)")
-	fmt.Println("   • GPU Mode: host (uses Apple Silicon Metal hardware acceleration)")
+	fmt.Printf("   • GPU Mode: %s (%s)\n", gpuMode, GetGpuBackendDescription(gpuMode))
 	fmt.Println("   • Runtime cache & snapshots: purged (prevents restoring stale 4GB/lavapipe states)\n")
 	fmt.Printf("ℹ️  Note: If this emulator is currently running, restart it to apply changes:\n   avdslim restart %s\n\n", avdName)
 	return nil

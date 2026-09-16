@@ -4,13 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/krunalbhalala/avdslim/internal/bloat"
+	"github.com/krunalbhalala/avdslim/internal/config"
 )
 
 const StateFilePath = "/data/local/tmp/avdslim_state.json"
@@ -205,13 +204,5 @@ func (c *Client) Restore(serial string) (int, error) {
 }
 
 func findAdb() string {
-	home, _ := os.UserHomeDir()
-	p := filepath.Join(home, "Library", "Android", "sdk", "platform-tools", "adb")
-	if _, err := os.Stat(p); err == nil {
-		return p
-	}
-	if p, err := exec.LookPath("adb"); err == nil {
-		return p
-	}
-	return "adb"
+	return config.FindAdbExecutable()
 }

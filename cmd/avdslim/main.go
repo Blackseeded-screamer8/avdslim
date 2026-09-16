@@ -273,6 +273,7 @@ func handleOff(client *adb.Client, args []string) {
 func handleTuneAvd(args []string) {
 	ramMb := 1536
 	heapMb := 256
+	gpuMode := ""
 	targetAvd := ""
 
 	for _, a := range args {
@@ -284,12 +285,14 @@ func handleTuneAvd(args []string) {
 			if v, err := strconv.Atoi(strings.TrimPrefix(a, "--heap=")); err == nil {
 				heapMb = v
 			}
+		} else if strings.HasPrefix(a, "--gpu=") {
+			gpuMode = strings.TrimPrefix(a, "--gpu=")
 		} else if !strings.HasPrefix(a, "--") {
 			targetAvd = a
 		}
 	}
 
-	if err := config.TuneAvd(targetAvd, ramMb, heapMb); err != nil {
+	if err := config.TuneAvd(targetAvd, ramMb, heapMb, gpuMode); err != nil {
 		fmt.Printf("❌ %v\n", err)
 	}
 }
@@ -304,6 +307,7 @@ func handleLaunch(client *adb.Client, args []string) {
 	avdName := args[0]
 	doSlim := false
 	ramMb := 1536
+	gpuMode := config.GetRecommendedGpuMode()
 
 	for _, a := range args[1:] {
 		if a == "--slim" {
@@ -312,10 +316,12 @@ func handleLaunch(client *adb.Client, args []string) {
 			if v, err := strconv.Atoi(strings.TrimPrefix(a, "--ram=")); err == nil {
 				ramMb = v
 			}
+		} else if strings.HasPrefix(a, "--gpu=") {
+			gpuMode = strings.TrimPrefix(a, "--gpu=")
 		}
 	}
 
-	emulator := findEmulator()
+	emulator := config.FindEmulatorExecutable()
 	emuArgs := []string{
 		"-avd", avdName,
 		"-lowram",
@@ -323,7 +329,7 @@ func handleLaunch(client *adb.Client, args []string) {
 		"-no-audio",
 		"-camera-back", "none",
 		"-camera-front", "none",
-		"-gpu", "host",
+		"-gpu", gpuMode,
 		"-no-boot-anim",
 		"-no-snapshot-load",
 	}
@@ -415,15 +421,7 @@ func handleRestart(client *adb.Client, args []string) {
 }
 
 func findEmulator() string {
-	home, _ := os.UserHomeDir()
-	p := filepath.Join(home, "Library", "Android", "sdk", "emulator", "emulator")
-	if _, err := os.Stat(p); err == nil {
-		return p
-	}
-	if p, err := exec.LookPath("emulator"); err == nil {
-		return p
-	}
-	return "emulator"
+	return config.FindEmulatorExecutable()
 }
 
 func handleWatch(client *adb.Client, args []string) {

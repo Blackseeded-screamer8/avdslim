@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -60,6 +61,21 @@ func FindHostPidForSerial(serial string) int {
 }
 
 func GetHostRssMb(pid int) int {
+	if runtime.GOOS == "linux" {
+		if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid)); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.HasPrefix(line, "VmRSS:") {
+					fields := strings.Fields(line)
+					if len(fields) >= 2 {
+						if kb, err := strconv.Atoi(fields[1]); err == nil {
+							return kb / 1024
+						}
+					}
+				}
+			}
+		}
+	}
+
 	cmd := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "rss=")
 	out, err := cmd.CombinedOutput()
 	if err == nil {

@@ -51,7 +51,11 @@ When developing Android apps on macOS or Linux, developers often discover `qemu-
 
 Just like `simslim` silences iOS simulators via `launchctl`, `avdslim`:
 1. **Passes `-lowram` to QEMU**: Removes the internal 4 GB lower bound and boots the Android kernel in low-RAM mode (`hw.ramSize = 1024M` or `1536M`).
-2. **Enforces Metal GPU Acceleration**: Forces `-gpu host` to render natively via Apple Silicon Metal, completely bypassing CPU software rasterizers.
+2. **Enforces Cross-Platform GPU Acceleration**: Forces `-gpu host` to render natively via host GPU drivers, completely bypassing CPU software rasterizers:
+   - **macOS (Apple Silicon / Intel)**: Native Apple Metal hardware acceleration.
+   - **Linux / Ubuntu (Desktop)**: Native DRI / OpenGL / Vulkan via Mesa / NVIDIA drivers (`/dev/dri`).
+   - **Linux / Ubuntu (Headless CI / Docker)**: Auto-detects headless environments (no `$DISPLAY`) and uses Google SwiftShader (`-gpu swiftshader_indirect`) to avoid display server crashes while bounding memory.
+   - **Windows 10 / 11**: Direct3D 11 via ANGLE or native Desktop OpenGL / Vulkan.
 3. **Disables 24+ Bloat Daemons**: Silences non-essential Google background services via `pm disable-user --user 0`.
 4. **Eliminates Animation Lag**: Sets window, transition, and animator scales to 0x.
 5. **Limits Background Churn**: Caps `background_process_limit = 2` and disables auto-sync.

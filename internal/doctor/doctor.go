@@ -2,9 +2,7 @@ package doctor
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/krunalbhalala/avdslim/internal/adb"
@@ -19,49 +17,50 @@ func RunDoctor(client *adb.Client) {
 
 	// 1. Toolchain Check
 	fmt.Println("🛠️  1. Toolchain & Environment:")
-	adbPath, err := exec.LookPath("adb")
-	if err != nil {
-		fmt.Println("   ❌ ADB: Not found in PATH!")
-		issuesCount++
+	adbPath := config.FindAdbExecutable()
+	if adbPath == "adb" {
+		if _, err := exec.LookPath("adb"); err != nil {
+			fmt.Println("   ❌ ADB: Not found in standard SDK path or PATH!")
+			issuesCount++
+		} else {
+			adbVerOut, _ := exec.Command(adbPath, "version").CombinedOutput()
+			firstLine := strings.Split(string(adbVerOut), "\n")[0]
+			fmt.Printf("   ✓ ADB: %s (%s)\n", adbPath, strings.TrimSpace(firstLine))
+		}
 	} else {
 		adbVerOut, _ := exec.Command(adbPath, "version").CombinedOutput()
 		firstLine := strings.Split(string(adbVerOut), "\n")[0]
 		fmt.Printf("   ✓ ADB: %s (%s)\n", adbPath, strings.TrimSpace(firstLine))
 	}
 
-	home, _ := os.UserHomeDir()
-	emuPath := filepath.Join(home, "Library", "Android", "sdk", "emulator", "emulator")
-	if _, err := os.Stat(emuPath); err != nil {
-		if p, err := exec.LookPath("emulator"); err == nil {
-			emuPath = p
+	emuPath := config.FindEmulatorExecutable()
+	if emuPath == "emulator" {
+		if _, err := exec.LookPath("emulator"); err != nil {
+			fmt.Println("   ⚠️  Android Emulator: Not found in standard SDK path or PATH")
+			issuesCount++
 		} else {
-			emuPath = ""
+			emuVerOut, _ := exec.Command(emuPath, "-version").CombinedOutput()
+			firstLine := strings.Split(string(emuVerOut), "\n")[0]
+			fmt.Printf("   ✓ Emulator: %s (%s)\n", emuPath, strings.TrimSpace(firstLine))
 		}
-	}
-	if emuPath == "" {
-		fmt.Println("   ⚠️  Android Emulator: Not found in standard SDK path or PATH")
-		issuesCount++
 	} else {
 		emuVerOut, _ := exec.Command(emuPath, "-version").CombinedOutput()
 		firstLine := strings.Split(string(emuVerOut), "\n")[0]
 		fmt.Printf("   ✓ Emulator: %s (%s)\n", emuPath, strings.TrimSpace(firstLine))
 	}
 
-	sdkDir := os.Getenv("ANDROID_HOME")
-	if sdkDir == "" {
-		sdkDir = filepath.Join(home, "Library", "Android", "sdk")
-	}
-	if _, err := os.Stat(sdkDir); err == nil {
+	sdkDir := config.GetAndroidSdkDir()
+	if sdkDir != "" {
 		fmt.Printf("   ✓ Android SDK: %s\n\n", sdkDir)
 	} else {
-		fmt.Printf("   ⚠️  Android SDK: %s not found\n\n", sdkDir)
+		fmt.Println("   ⚠️  Android SDK directory not found ($ANDROID_HOME not set)\n")
 	}
 
 	// 2. Installed AVD Configurations Audit
 	fmt.Println("💾 2. Installed AVD Configurations Audit:")
 	avds := config.GetInstalledAvds()
 	if len(avds) == 0 {
-		fmt.Println("   ℹ️  No AVDs found in ~/.android/avd\n")
+		fmt.Printf("   ℹ️  No AVDs found in %s\n\n", config.GetAvdBaseDir())
 	} else {
 		for _, avd := range avds {
 			name := avd["name"]
@@ -91,10 +90,10 @@ func RunDoctor(client *adb.Client) {
 			}
 
 			// Check GPU Mode
-			if gpu == "host" {
-				fmt.Println("     ✓ Metal Hardware GPU Acceleration enabled (`host`)")
+			if gpu == "host" || gpu == "swiftshader_indirect" || gpu == "angle_indirect" {
+				fmt.Printf("     ✓ Hardware GPU acceleration enabled: %s (%s)\n", gpu, config.GetGpuBackendDescription(gpu))
 			} else {
-				fmt.Printf("     ⚠️  GPU Mode is %q (Recommend: `host` for native Apple Silicon Metal GPU)\n", gpu)
+				fmt.Printf("     ⚠️  GPU Mode is %q (Recommend: `host` for native hardware acceleration)\n", gpu)
 				issuesCount++
 			}
 		}
