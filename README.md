@@ -116,7 +116,7 @@ Prefer clicking the green **"Play"** button in Android Studio? Wrap the SDK emul
 ```bash
 avdslim install-shim
 ```
-* **Zero workflow changes**: Android Studio launches automatically stay slimmed (1536 MB, `-lowram`, Metal GPU).
+* **Zero workflow changes**: Android Studio launches automatically stay slimmed (1024 MB, `-lowram`, Metal GPU).
 * **Safe & reversible anytime**: `avdslim uninstall-shim` restores the original SDK binary instantly.
 
 ---
@@ -214,9 +214,9 @@ avdslim measure emulator-5554
 ### 10. Tune Host AVD Configuration (`tune-avd`)
 Configures an AVD's `config.ini` for optimal memory consumption and purges stale snapshots:
 ```bash
-avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
+avdslim tune-avd Pixel_10_Pro --ram=1024 --heap=256
 ```
-* Sets `hw.ramSize = 1536` (or 1024)
+* Sets `hw.ramSize = 1024`
 * Sets `hw.gpu.mode = host` (Apple Silicon Metal hardware acceleration)
 * Disables camera and audio emulation threads
 * Purges stale `hardware-qemu.ini` and snapshots
@@ -226,7 +226,7 @@ avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
 ### 11. Restart Emulator with Clean Cache (`restart`)
 Gracefully shuts down the emulator, purges stale runtime snapshots, and relaunches with low-memory host flags:
 ```bash
-avdslim restart emulator-5554 --ram=1536
+avdslim restart emulator-5554 --ram=1024
 ```
 
 ---
@@ -258,7 +258,22 @@ avdslim start 1 --no-slim
 
 ---
 
-### 13. Environment Doctor (`doctor`)
+### 13. Graceful Stop with Snapshot Prompt (`stop`, `kill`)
+Gracefully shuts down the emulator. Optionally updates the Golden Snapshot with your session's state:
+```bash
+# Interactive (prompts if you want to save current state):
+avdslim stop
+
+# Automatically trim bloat, snapshot state, and exit:
+avdslim stop --snap
+
+# Immediate force exit without snapshotting:
+avdslim stop -f
+```
+
+---
+
+### 14. Environment Doctor (`doctor`)
 Audits your Android toolchain, active AVDs, Golden Snapshots, 16K page size overhead, and warns about software GPU fallback:
 ```bash
 avdslim doctor
@@ -266,7 +281,7 @@ avdslim doctor
 
 ---
 
-### 14. View Bloat Profiles (`profiles`)
+### 15. View Bloat Profiles (`profiles`)
 Inspects the list of disabled packages categorized by function (Assistant, Telephony, Consumer Bloat, etc.) and guaranteed core services:
 ```bash
 avdslim profiles
@@ -282,7 +297,7 @@ Slash CI runner memory and run parallel emulator shards on free GitHub Actions r
 - name: Setup AVD-SLIM
   uses: kdbhalala/avdslim@main
   with:
-    ram: '1536'
+    ram: '1024'
     install-shim: 'true'
 ```
 

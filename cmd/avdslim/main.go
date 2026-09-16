@@ -20,7 +20,7 @@ import (
 	"github.com/krunalbhalala/avdslim/internal/shim"
 )
 
-const version = "1.0.3"
+const version = "1.0.4"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -55,6 +55,8 @@ func main() {
 		handleTuneAvd(subArgs)
 	case "launch", "start", "run":
 		handleLaunch(client, subArgs)
+	case "stop", "kill", "quit":
+		handleStop(client, subArgs)
 	case "bake":
 		handleBake(client, subArgs)
 	case "snapshot", "snap":
@@ -94,18 +96,19 @@ Commands:
   restore, off         Instant 100%% stock restore (re-enables packages, animations & sync)
   watch                Auto-detect & slim new emulators as soon as they boot
                        Options: --aggressive, --keep=<package>
-  tune-avd [avd_name]  Tune host AVD config.ini (RAM=1536M, Metal GPU, no cameras)
-                       Options: --ram=<MB> (default: 1536), --heap=<MB> (default: 256)
+  tune-avd [avd_name]  Tune host AVD config.ini (RAM=1024M, Metal GPU, no cameras)
+                       Options: --ram=<MB> (default: 1024), --heap=<MB> (default: 256)
   start, run, launch [avd] Launch AVD with low-memory host flags & auto-slim upon boot
-                       Options: --no-slim, --no-lowram, --headless, --cold, --ram=<MB> (default: 1536)
+                       Options: --no-slim, --no-lowram, --headless, --cold, --ram=<MB> (default: 1024)
+  stop, kill [device]  Gracefully shut down emulator (Options: --snap, -f)
   bake [avd_name]      Create local Golden Snapshot (pruned & slimmed) for ~1.5s instant boots
-                       Options: --ram=<MB> (default: 1536), --aggressive, --headless, --live
+                       Options: --ram=<MB> (default: 1024), --aggressive, --headless, --live
   snapshot, snap       Capture running emulator (with pre-installed apps & test logins)
                        into Golden Snapshot for instant <1.5s restores
   unbake [avd_name]    Delete Golden Snapshot and return AVD to stock cold boots
   bench [device]       Show before/after memory & CPU efficiency scoreboard
   install-shim         Wrap SDK emulator binary so Android Studio launches stay slim
-                       Options: --ram=<MB> (default: 1536)
+                       Options: --ram=<MB> (default: 1024)
   uninstall-shim       Restore stock Android SDK emulator binary
   doctor               Audit environment, AVDs, system image 16K overhead & toolchain
   profiles             List all bloat categories, packages & guaranteed-working services
@@ -118,7 +121,7 @@ Examples:
   avdslim measure
   avdslim on --aggressive
   avdslim on --keep=com.google.android.apps.maps
-  avdslim tune-avd Pixel_10_Pro --ram=1536
+  avdslim tune-avd Pixel_10_Pro --ram=1024
   avdslim restart
 `, version)
 }
@@ -347,7 +350,7 @@ func selectAvdInteractively(installed []map[string]string, promptTitle string) (
 }
 
 func handleTuneAvd(args []string) {
-	ramMb := 1536
+	ramMb := 1024
 	heapMb := 256
 	gpuMode := ""
 	targetAvd := ""
@@ -419,7 +422,7 @@ func handleLaunch(client *adb.Client, args []string) {
 	lowRam := true
 	headless := false
 	forceCold := false
-	ramMb := 1536
+	ramMb := 1024
 	gpuMode := config.GetRecommendedGpuMode()
 
 	for _, a := range options {
@@ -507,6 +510,84 @@ func handleLaunch(client *adb.Client, args []string) {
 			fmt.Println("⚠️  Boot timed out after 120s. You can run `avdslim on` manually.")
 		}
 	}
+}
+
+func handleStop(client *adb.Client, args []string) {
+	var serial string
+	snap := false
+	force := false
+
+	for _, a := range args {
+		if a == "--snap" || a == "--snapshot" {
+			snap = true
+		} else if a == "-f" || a == "--force" || a == "--no-snap" {
+			force = true
+		} else if !strings.HasPrefix(a, "--") {
+			serial = a
+		}
+	}
+
+	running, err := client.GetRunningEmulators()
+	if err != nil || len(running) == 0 {
+		fmt.Println("ℹ️  No running Android emulator detected.")
+		return
+	}
+
+	if serial == "" {
+		if len(running) == 1 {
+			serial = running[0].Serial
+		} else {
+			fmt.Println("📱 Running Emulators:")
+			for i, emu := range running {
+				nameOut, _ := client.Exec("-s", emu.Serial, "emu", "avd", "name")
+				name := strings.TrimSpace(strings.Split(nameOut, "\n")[0])
+				fmt.Printf("   [%d] %s (%s)\n", i+1, emu.Serial, name)
+			}
+			fmt.Print("\nSelect an emulator to stop (number): ")
+			reader := bufio.NewReader(os.Stdin)
+			text, _ := reader.ReadString('\n')
+			text = strings.TrimSpace(text)
+			if idx, err := strconv.Atoi(text); err == nil && idx >= 1 && idx <= len(running) {
+				serial = running[idx-1].Serial
+			} else {
+				serial = running[0].Serial
+			}
+		}
+	}
+
+	avdNameOut, _ := client.Exec("-s", serial, "emu", "avd", "name")
+	avdName := strings.TrimSpace(strings.Split(avdNameOut, "\n")[0])
+	if avdName == "" {
+		avdName = serial
+	}
+
+	// If not force and not already --snap, prompt
+	if !force && !snap {
+		fmt.Printf("💾 Save current state of %s into Golden Snapshot before stopping? [y/N]: ", avdName)
+		reader := bufio.NewReader(os.Stdin)
+		ans, _ := reader.ReadString('\n')
+		ans = strings.ToLower(strings.TrimSpace(ans))
+		if ans == "y" || ans == "yes" {
+			snap = true
+		}
+	}
+
+	if snap {
+		fmt.Printf("📸 Capturing Golden Snapshot for %s before shutdown...\n", avdName)
+		handleSnapshot(client, []string{serial})
+	}
+
+	fmt.Printf("🛑 Gracefully shutting down %s (%s)...\n", serial, avdName)
+	client.Exec("-s", serial, "emu", "kill")
+
+	for i := 0; i < 10; i++ {
+		time.Sleep(1 * time.Second)
+		if pid := host.FindHostPidForSerial(serial); pid == 0 {
+			break
+		}
+	}
+	fmt.Println("✓ Emulator process stopped cleanly.")
+	fmt.Println()
 }
 
 func handleRestart(client *adb.Client, args []string) {
@@ -699,7 +780,7 @@ func handleBench(client *adb.Client, args []string) {
 }
 
 func handleInstallShim(args []string) {
-	ramMb := 1536
+	ramMb := 1024
 	for _, a := range args {
 		if strings.HasPrefix(a, "--ram=") {
 			if v, err := strconv.Atoi(strings.TrimPrefix(a, "--ram=")); err == nil {
@@ -716,7 +797,7 @@ func handleInstallShim(args []string) {
 
 	fmt.Println("✅ Successfully installed emulator shim!")
 	fmt.Println("   • From now on, launching emulators via Android Studio 'Play' button")
-	fmt.Println("     will automatically inject -memory 1536 -lowram -no-audio flags.")
+	fmt.Println("     will automatically inject -memory 1024 -lowram -no-audio flags.")
 	fmt.Println("   • To restore stock Android Studio emulator behavior anytime:")
 	fmt.Println("     avdslim uninstall-shim")
 	fmt.Println()
@@ -742,7 +823,7 @@ func handleBake(client *adb.Client, args []string) {
 
 	installed := config.GetInstalledAvds()
 	var targetAvd string
-	ramMb := 1536
+	ramMb := 1024
 	aggressive := false
 	headless := false
 	var keepPackages []string
@@ -919,7 +1000,7 @@ func handleBake(client *adb.Client, args []string) {
 	fmt.Println("════════════════════════════════════════════════════════════════════════")
 	fmt.Println(" • Snapshot Name: 'avdslim_clean'")
 	fmt.Println(" • Startup Latency: Reduced from ~45s cold boot to <1.5s instant restore ⚡")
-	fmt.Println(" • RAM Allocation: 1536 MB (-lowram)")
+	fmt.Printf(" • RAM Allocation: %d MB (-lowram)\n", ramMb)
 	fmt.Println(" • How to launch:")
 	fmt.Printf("     avdslim start %s\n", targetAvd)
 	fmt.Println("   Or click 'Play' in Android Studio (if `avdslim install-shim` is enabled).")

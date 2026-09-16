@@ -7,9 +7,9 @@ branding:
 
 inputs:
   ram:
-    description: 'Target RAM allocation in MB (default: 1536)'
+    description: 'Target RAM allocation in MB (default: 1024)'
     required: false
-    default: '1536'
+    default: '1024'
   install-shim:
     description: 'Transparently wrap Android SDK emulator binary so all CI scripts/Gradle tasks run slimmed'
     required: false

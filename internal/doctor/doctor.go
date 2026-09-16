@@ -92,10 +92,10 @@ func RunDoctor(client *adb.Client) {
 			}
 
 			// Check RAM allocation
-			if ram == "1536" || ram == "1024" || ram == "1280" {
+			if ram == "1024" || ram == "1536" || ram == "1280" {
 				fmt.Printf("     ✓ Tuned low-RAM allocation: %s MB\n", ram)
 			} else {
-				fmt.Printf("     ⚠️  High RAM allocated: %s MB (Recommend: 1536 MB via `avdslim tune-avd %s`)\n", ram, name)
+				fmt.Printf("     ⚠️  High RAM allocated: %s MB (Recommend: 1024 MB via `avdslim tune-avd %s`)\n", ram, name)
 				issuesCount++
 			}
 

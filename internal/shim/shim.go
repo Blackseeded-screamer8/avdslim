@@ -57,7 +57,7 @@ func InstallShim(defaultRam int) error {
 	}
 
 	if defaultRam <= 0 {
-		defaultRam = 1536
+		defaultRam = 1024
 	}
 
 	// Check if already installed
