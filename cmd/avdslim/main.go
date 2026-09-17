@@ -22,7 +22,7 @@ import (
 )
 
 // var, not const: release.yml sets it via -ldflags "-X main.version=...".
-var version = "1.0.8"
+var version = "1.0.9"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -69,6 +69,8 @@ func main() {
 		handleUnbake(subArgs)
 	case "restart":
 		handleRestart(client, subArgs)
+	case "repair", "fix":
+		handleRepair(client, subArgs)
 	case "bench", "benchmark":
 		handleBench(client, subArgs)
 	case "install-shim", "shim":
@@ -168,6 +170,7 @@ Commands:
                        Options: --ram=<MB> (default: 1536), --aggressive, --skip=<groups>, --headless, --live
   snapshot, snap       Capture running emulator (with pre-installed apps & test logins)
                        into Golden Snapshot for instant <1.5s restores
+  repair [device]      Unstick an AVD hung on a black screen after slimming (needs adb root)
   unbake [avd_name]    Delete Golden Snapshot and return AVD to stock cold boots
   bench [device]       Show before/after memory & CPU efficiency scoreboard
   install-shim         Wrap SDK emulator binary so Android Studio launches stay slim
@@ -385,6 +388,39 @@ func handleOff(client *adb.Client, args []string) {
 	fmt.Printf("   -> Restored %d packages.\n\n", count)
 	fmt.Println("2. Restored the system settings avdslim changed to their previous values.")
 	fmt.Printf("✅ Successfully restored %s to stock configuration.\n\n", serial)
+}
+
+func handleRepair(client *adb.Client, args []string) {
+	serial, err := client.ResolveDevice(args)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		return
+	}
+
+	fmt.Printf("🩺 Repairing %s...\n", serial)
+	fixed, err := client.Repair(serial)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		os.Exit(1)
+	}
+	if len(fixed) == 0 {
+		fmt.Println("✓ No boot-critical packages disabled. Nothing to repair.")
+		return
+	}
+	for _, p := range fixed {
+		fmt.Printf("   ✓ Re-enabled: %s\n", p)
+	}
+
+	fmt.Println("⏳ Framework restarted, waiting for boot...")
+	for i := 0; i < 60; i++ {
+		res, _ := client.Exec("-s", serial, "shell", "getprop", "sys.boot_completed")
+		if strings.TrimSpace(res) == "1" {
+			fmt.Printf("✅ %s booted.\n\n", serial)
+			return
+		}
+		time.Sleep(2 * time.Second)
+	}
+	fmt.Println("⚠️  Boot still not complete after 120s. Check `adb logcat -b crash`.")
 }
 
 func handleEnable(client *adb.Client, args []string) {

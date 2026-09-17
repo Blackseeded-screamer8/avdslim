@@ -272,6 +272,17 @@ The Android Studio shim reads `--ram` from this file at every launch, so changin
 
 ---
 
+### Repair a Stuck AVD (`repair`)
+
+AVD hangs on a black screen after a stop/start? avdslim ≤ 1.0.8 disabled
+`com.google.android.bluetooth`, which Android 16+ needs to boot. With the
+stuck emulator still running:
+```bash
+avdslim repair            # or: avdslim repair emulator-5554
+```
+Re-enables boot-critical packages and restarts the framework. Needs `adb root`
+(Google APIs images). On Play Store images, cold boot with `-wipe-data` instead.
+
 ### 9. Deep Memory Breakdown (`measure`)
 Inspect host macOS memory (`phys_footprint`, resident RSS) alongside the guest Android `dumpsys meminfo`:
 ```bash

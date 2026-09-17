@@ -47,4 +47,8 @@ installs binary, `install-shim`, optional `watch` daemon).
 - Shim breaks Studio launches → original binary is at `emulator.real`;
   `avdslim uninstall-shim` renames it back. Shim install needs write access
   to the SDK `emulator/` dir.
+- Guest black screen / `sys.boot_completed` never 1, crash log shows
+  `Conflicting system configuration detected` → a `bloat.BootCritical`
+  package is disabled (avdslim ≤ 1.0.8 disabled the BT APK). `avdslim repair`
+  fixes it via `adb root` (edits `package-restrictions.xml`).
 - Bare `config.ini` rewrite drops comments/ordering (map round-trip) — cosmetic.

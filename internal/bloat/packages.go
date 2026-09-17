@@ -2,6 +2,10 @@ package bloat
 
 import "fmt"
 
+// BootCritical packages must never be disabled: the guest cannot finish a cold
+// boot without them. `avdslim repair` re-enables them on a stuck guest.
+var BootCritical = []string{"com.google.android.bluetooth"}
+
 // StandardBloatCategories lists non-essential background packages safe to disable
 // for everyday Android / Flutter development.
 // Core OS functionality, WebView, Flutter runtime, networking, and Google Play
@@ -12,8 +16,10 @@ var StandardBloatCategories = map[string][]string{
 		"com.google.android.as",
 		"com.google.android.as.oss",
 	},
-	"Bluetooth & Peripheral Services (~20-40 MB RAM)": {
-		"com.google.android.bluetooth",
+	// Never com.google.android.bluetooth: Android 16+ system_server crash-loops on
+	// boot when FEATURE_BLUETOOTH is set but the BT APK is disabled. Radio is
+	// turned off at runtime via bluetooth_on=0 instead.
+	"Bluetooth & Peripheral Services (~5-10 MB RAM)": {
 		"com.android.bluetoothmidiservice",
 	},
 	"Privacy Sandbox & Ad Measurement (~10-25 MB RAM)": {

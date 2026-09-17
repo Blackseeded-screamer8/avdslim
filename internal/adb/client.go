@@ -337,6 +337,47 @@ func (c *Client) Restore(serial string) (int, error) {
 	return restoredCount, nil
 }
 
+// repairScript builds the guest shell script that re-enables pkgs by editing
+// package-restrictions.xml directly, since `pm` is unavailable while
+// system_server crash-loops. The file carries fs-verity, so it is replaced by
+// rename rather than written in place.
+func repairScript(pkgs []string) string {
+	var check, fix strings.Builder
+	for _, p := range pkgs {
+		name := `name="` + strings.ReplaceAll(p, ".", `\.`) + `"`
+		fmt.Fprintf(&check, `grep -q '%s[^>]*enabled="[23]"' $t && echo FIXED:%s && n=1; `, name, p)
+		fmt.Fprintf(&fix, ` -e 's|\(%s[^>]*\) enabled="[23]" enabledCaller="[^"]*"|\1|'`, name)
+	}
+	return `set -e; d=/data/system/users/0; f=$d/package-restrictions.xml; t=/data/local/tmp/avdslim_pr.xml; n=0; ` +
+		`abx2xml $f $t; ` + check.String() +
+		`if [ $n = 1 ]; then stop; sed -i` + fix.String() + ` $t; ` +
+		`xml2abx $t $d/avdslim_pr.new; chown system:system $d/avdslim_pr.new; chmod 660 $d/avdslim_pr.new; ` +
+		`restorecon $d/avdslim_pr.new; mv -f $d/avdslim_pr.new $f; rm -f $f.reservecopy; start; fi; rm -f $t`
+}
+
+// Repair re-enables boot-critical packages on a guest stuck in a
+// system_server crash loop and restarts the framework. Needs `adb root`
+// (google_apis images; Play Store images refuse it).
+func (c *Client) Repair(serial string) ([]string, error) {
+	out, _ := c.Exec("-s", serial, "root")
+	if strings.Contains(out, "cannot run as root") {
+		return nil, fmt.Errorf("adb root not permitted on this image (Play Store build); cold boot with -wipe-data instead")
+	}
+	c.Exec("-s", serial, "wait-for-device")
+
+	out, err := c.Exec("-s", serial, "shell", repairScript(bloat.BootCritical))
+	if err != nil {
+		return nil, fmt.Errorf("repair script failed: %s", strings.TrimSpace(out))
+	}
+	var fixed []string
+	for _, line := range strings.Split(out, "\n") {
+		if p, ok := strings.CutPrefix(strings.TrimSpace(line), "FIXED:"); ok {
+			fixed = append(fixed, p)
+		}
+	}
+	return fixed, nil
+}
+
 var featureAliases = map[string][]string{
 	"bluetooth":    {"com.google.android.bluetooth", "com.android.bluetoothmidiservice"},
 	"bt":           {"com.google.android.bluetooth", "com.android.bluetoothmidiservice"},
