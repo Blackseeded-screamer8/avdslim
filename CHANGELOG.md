@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.9 — 2026-09-17
+
+### Added
+- **`avdslim repair` Command**: Unsticks an AVD hung on a black screen by re-enabling boot-critical packages directly in `package-restrictions.xml` (via `adb root`) and restarting the framework. Keeps user data.
+
+### Fixed
+- **AVD stuck on black screen after stop/start**: slimming no longer disables `com.google.android.bluetooth`. On Android 16+ images `system_server` crash-loops at boot (`FATAL: Conflicting system configuration detected`) when the Bluetooth APK is disabled, so every cold boot after the first slim hung. Bluetooth is still switched off at runtime via `bluetooth_on=0`.
+
 ## v1.0.8 — 2026-09-17
 
 ### Added
