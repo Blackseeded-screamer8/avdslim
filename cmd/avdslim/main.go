@@ -23,7 +23,7 @@ import (
 )
 
 // var, not const: release.yml sets it via -ldflags "-X main.version=...".
-var version = "1.0.9"
+var version = "1.0.10"
 
 func main() {
 	if len(os.Args) < 2 {

@@ -2,7 +2,7 @@
 set -e
 
 REPO="kdbhalala/avdslim"
-VERSION="v1.0.9"
+VERSION="v1.0.10"
 
 # Detect OS and Arch
 OS="$(uname -s)"

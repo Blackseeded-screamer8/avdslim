@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.0.10 — 2026-09-17
 
 ### Fixed
 - **`start` / `bake` targeted the wrong emulator when another was already running**: the boot wait and slimming ran against whichever device adb picked, so `avdslim start 2` with AVD 1 up re-slimmed AVD 1 and left AVD 2 on a black screen. Both now pass `-port` to the emulator and target that serial.
