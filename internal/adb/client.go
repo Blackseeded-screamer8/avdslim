@@ -44,14 +44,16 @@ var tweaks = []tweak{
 	{"animations", "global", "transition_animation_scale", "0"},
 	{"animations", "global", "animator_duration_scale", "0"},
 	{"bglimit", "global", "background_process_limit", "4"},
+	{"bglimit", "global", "activity_manager_constants", "max_cached_processes=4"},
 	{"sync", "global", "auto_sync", "0"},
 	{"location", "secure", "location_mode", "0"},
 	{"setup", "secure", "user_setup_complete", "1"},
 	{"setup", "global", "device_provisioned", "1"},
+	{"bluetooth", "global", "bluetooth_on", "0"},
 }
 
 // SkipGroups lists the values --skip accepts.
-var SkipGroups = []string{"animations", "bglimit", "sync", "location", "setup"}
+var SkipGroups = []string{"animations", "bglimit", "sync", "location", "setup", "bluetooth"}
 
 // IsSkipGroup reports whether g is a valid --skip value.
 func IsSkipGroup(g string) bool {
@@ -194,8 +196,11 @@ func (c *Client) ResolveDevice(args []string) (string, error) {
 
 // Slim disables bloat packages and applies tweaks, except groups in skip.
 func (c *Client) Slim(serial string, aggressive bool, keepPackages []string, skip map[string]bool) (int, error) {
-	targetPackages := make([]string, 0, 50)
-	for _, pkgs := range bloat.StandardBloatCategories {
+	targetPackages := make([]string, 0, 70)
+	for cat, pkgs := range bloat.StandardBloatCategories {
+		if strings.HasPrefix(cat, "Bluetooth") && skip["bluetooth"] {
+			continue
+		}
 		targetPackages = append(targetPackages, pkgs...)
 	}
 	if aggressive {
@@ -265,6 +270,9 @@ func (c *Client) Slim(serial string, aggressive bool, keepPackages []string, ski
 			c.Exec("-s", serial, "shell", "settings", "put", t.Namespace, t.Name, t.Value)
 		}
 	}
+	if !skip["bluetooth"] {
+		c.Exec("-s", serial, "shell", "cmd", "bluetooth_manager", "disable")
+	}
 
 	// Trim memory
 	c.Exec("-s", serial, "shell", "am", "kill-all")
@@ -310,6 +318,9 @@ func (c *Client) Restore(serial string) (int, error) {
 				c.Exec("-s", serial, "shell", "settings", "put", t.Namespace, t.Name, *orig)
 			}
 		}
+		if orig, recorded := state.Settings["global/bluetooth_on"]; recorded && (orig == nil || *orig != "0") {
+			c.Exec("-s", serial, "shell", "cmd", "bluetooth_manager", "enable")
+		}
 	} else {
 		// ponytail: state from avdslim <= 1.0.5 has no originals, so fall back to stock values.
 		c.Exec("-s", serial, "shell", "settings", "put", "global", "window_animation_scale", "1")
@@ -318,10 +329,150 @@ func (c *Client) Restore(serial string) (int, error) {
 		c.Exec("-s", serial, "shell", "settings", "delete", "global", "background_process_limit")
 		c.Exec("-s", serial, "shell", "settings", "put", "global", "auto_sync", "1")
 		c.Exec("-s", serial, "shell", "settings", "put", "secure", "location_mode", "3")
+		c.Exec("-s", serial, "shell", "settings", "put", "global", "bluetooth_on", "1")
+		c.Exec("-s", serial, "shell", "cmd", "bluetooth_manager", "enable")
 	}
 	c.Exec("-s", serial, "shell", "rm", "-f", StateFilePath)
 
 	return restoredCount, nil
+}
+
+var featureAliases = map[string][]string{
+	"bluetooth":    {"com.google.android.bluetooth", "com.android.bluetoothmidiservice"},
+	"bt":           {"com.google.android.bluetooth", "com.android.bluetoothmidiservice"},
+	"maps":         {"com.google.android.apps.maps"},
+	"photos":       {"com.google.android.apps.photos"},
+	"chrome":       {"com.android.chrome"},
+	"camera":       {"com.android.camera2", "com.android.cameraextensions", "com.android.DeviceAsWebcam"},
+	"store":        {"com.android.vending"},
+	"playstore":    {"com.android.vending"},
+	"vending":      {"com.android.vending"},
+	"youtube":      {"com.google.android.youtube", "com.google.android.apps.youtube.music"},
+	"music":        {"com.google.android.music", "com.android.music"},
+	"sms":          {"com.google.android.apps.messaging", "com.android.mms"},
+	"messaging":    {"com.google.android.apps.messaging", "com.android.mms"},
+	"dialer":       {"com.google.android.dialer", "com.android.dialer"},
+	"phone":        {"com.google.android.dialer", "com.android.dialer"},
+	"contacts":     {"com.google.android.contacts", "com.android.contacts"},
+	"docs":         {"com.google.android.apps.docs"},
+	"drive":        {"com.google.android.apps.docs"},
+	"printing":     {"com.android.printspooler", "com.android.bips", "com.google.android.printservice.recommendation"},
+	"print":        {"com.android.printspooler", "com.android.bips", "com.google.android.printservice.recommendation"},
+	"search":       {"com.google.android.googlequicksearchbox"},
+	"assistant":    {"com.google.android.googlequicksearchbox"},
+	"wellbeing":    {"com.google.android.apps.wellbeing"},
+	"clock":        {"com.android.deskclock", "com.google.android.deskclock"},
+	"calculator":   {"com.android.calculator2", "com.google.android.calculator"},
+	"calendar":     {"com.android.calendar", "com.google.android.calendar"},
+	"voiceaccess":  {"com.google.android.apps.accessibility.voiceaccess"},
+	"markup":       {"com.google.android.markup"},
+	"safety":       {"com.google.android.apps.safetyhub"},
+	"multidisplay": {"com.android.emulator.multidisplay"},
+}
+
+// Enable re-enables a specific feature, setting group, or package on the device,
+// and updates the on-device state JSON.
+func (c *Client) Enable(serial, target string) ([]string, error) {
+	norm := strings.ToLower(strings.TrimSpace(target))
+	var actions []string
+	var packagesToEnable []string
+	var settingsToRemove []string
+
+	state, hasState := c.readState(serial)
+
+	switch norm {
+	case "bluetooth", "bt":
+		packagesToEnable = featureAliases["bluetooth"]
+		c.Exec("-s", serial, "shell", "settings", "put", "global", "bluetooth_on", "1")
+		c.Exec("-s", serial, "shell", "cmd", "bluetooth_manager", "enable")
+		actions = append(actions, "Bluetooth enabled (bluetooth_manager ON, settings put global bluetooth_on 1)")
+		settingsToRemove = append(settingsToRemove, "global/bluetooth_on")
+
+	case "animations", "anim":
+		c.Exec("-s", serial, "shell", "settings", "put", "global", "window_animation_scale", "1")
+		c.Exec("-s", serial, "shell", "settings", "put", "global", "transition_animation_scale", "1")
+		c.Exec("-s", serial, "shell", "settings", "put", "global", "animator_duration_scale", "1")
+		actions = append(actions, "Animations restored to 1.0x (stock fluid)")
+		settingsToRemove = append(settingsToRemove, "global/window_animation_scale", "global/transition_animation_scale", "global/animator_duration_scale")
+
+	case "sync":
+		c.Exec("-s", serial, "shell", "settings", "put", "global", "auto_sync", "1")
+		actions = append(actions, "Auto-sync enabled (settings put global auto_sync 1)")
+		settingsToRemove = append(settingsToRemove, "global/auto_sync")
+
+	case "location", "gps":
+		c.Exec("-s", serial, "shell", "settings", "put", "secure", "location_mode", "3")
+		actions = append(actions, "Location mode restored (settings put secure location_mode 3)")
+		settingsToRemove = append(settingsToRemove, "secure/location_mode")
+
+	case "bglimit":
+		c.Exec("-s", serial, "shell", "settings", "delete", "global", "background_process_limit")
+		c.Exec("-s", serial, "shell", "settings", "delete", "global", "activity_manager_constants")
+		actions = append(actions, "Background process limits cleared")
+		settingsToRemove = append(settingsToRemove, "global/background_process_limit", "global/activity_manager_constants")
+
+	default:
+		if pkgs, ok := featureAliases[norm]; ok {
+			packagesToEnable = pkgs
+		} else if strings.Contains(target, ".") {
+			packagesToEnable = []string{target}
+		} else {
+			var matched []string
+			for _, pkgs := range bloat.StandardBloatCategories {
+				for _, p := range pkgs {
+					parts := strings.Split(p, ".")
+					if strings.EqualFold(parts[len(parts)-1], norm) {
+						matched = append(matched, p)
+					}
+				}
+			}
+			for _, p := range bloat.AggressiveBloatPackages {
+				parts := strings.Split(p, ".")
+				if strings.EqualFold(parts[len(parts)-1], norm) {
+					matched = append(matched, p)
+				}
+			}
+			if len(matched) > 0 {
+				packagesToEnable = matched
+			} else {
+				return nil, fmt.Errorf("unknown feature or package %q (specify 'bluetooth', 'animations', 'sync', 'location', or an app name/package)", target)
+			}
+		}
+	}
+
+	enabledSet := make(map[string]bool)
+	for _, pkg := range packagesToEnable {
+		res, _ := c.Exec("-s", serial, "shell", "pm", "enable", pkg)
+		if strings.Contains(res, "enabled") || strings.Contains(res, "new state") || res == "" {
+			actions = append(actions, fmt.Sprintf("Enabled package: %s", pkg))
+			enabledSet[pkg] = true
+		}
+	}
+
+	if hasState {
+		var updatedDisabled []string
+		for _, p := range state.DisabledPackages {
+			if !enabledSet[p] {
+				updatedDisabled = append(updatedDisabled, p)
+			}
+		}
+		state.DisabledPackages = updatedDisabled
+
+		if state.Settings != nil {
+			for _, s := range settingsToRemove {
+				delete(state.Settings, s)
+			}
+		}
+
+		if len(state.DisabledPackages) == 0 && (state.Settings == nil || len(state.Settings) == 0) {
+			c.Exec("-s", serial, "shell", "rm", "-f", StateFilePath)
+		} else {
+			stateJson, _ := json.Marshal(state)
+			c.Exec("-s", serial, "shell", "echo", fmt.Sprintf("'%s'", string(stateJson)), ">", StateFilePath)
+		}
+	}
+
+	return actions, nil
 }
 
 func findAdb() string {

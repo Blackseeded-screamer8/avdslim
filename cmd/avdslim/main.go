@@ -49,6 +49,8 @@ func main() {
 		handleMeasure(client, subArgs)
 	case "on", "slim":
 		handleOn(client, subArgs)
+	case "enable":
+		handleEnable(client, subArgs)
 	case "off", "unslim", "restore", "reset":
 		handleOff(client, subArgs)
 	case "watch":
@@ -91,6 +93,11 @@ var flagCommands = map[string]bool{
 var knownDefaultFlags = []string{
 	"--ram=", "--heap=", "--gpu=", "--keep=", "--skip=",
 	"--aggressive", "--headless", "--no-lowram", "--no-slim",
+	"--no-anim", "--no-animations", "--anim", "--animations",
+}
+
+func newDefaultSkip() map[string]bool {
+	return map[string]bool{"animations": true}
 }
 
 // withDefaults puts the defaults file's flags before args, so flags typed on the
@@ -145,10 +152,13 @@ Commands:
   on [device]          Slim down emulator: disable bloat daemons & trim RAM
                        Options: --aggressive (also disables Play Store updater)
                                 --keep=<package> (preserve specific package, e.g. Maps)
-                                --skip=<groups> (leave settings alone: animations,bglimit,sync,location,setup)
+                                --no-anim (turn animations 0x for instant UI response)
+                                --skip=<groups> (leave alone: bluetooth,bglimit,sync,location,setup)
   restore, off         Instant 100%% stock restore (re-enables packages, animations & sync)
+  enable <target> [dev] Re-enable a feature (bluetooth, animations, sync, location) or package
+                       on a running AVD (Options: --all)
   watch                Auto-detect & slim new emulators as soon as they boot
-                       Options: --aggressive, --keep=<package>, --skip=<groups>
+                       Options: --aggressive, --keep=<package>, --no-anim, --skip=<groups>
   tune-avd [avd_name]  Tune host AVD config.ini (RAM=1536M, Metal GPU, no cameras)
                        Options: --ram=<MB> (default: 1536), --heap=<MB> (default: 256)
   start, run, launch [avd] Launch AVD with low-memory host flags & auto-slim upon boot
@@ -271,7 +281,7 @@ func handleOn(client *adb.Client, args []string) {
 	aggressive := false
 	filteredArgs := make([]string, 0, len(args))
 	var keepPackages []string
-	skip := make(map[string]bool)
+	skip := newDefaultSkip()
 	for _, a := range args {
 		if a == "--aggressive" {
 			aggressive = true
@@ -280,6 +290,10 @@ func handleOn(client *adb.Client, args []string) {
 			if pkg != "" {
 				keepPackages = append(keepPackages, pkg)
 			}
+		} else if a == "--no-anim" || a == "--no-animations" {
+			delete(skip, "animations")
+		} else if a == "--anim" || a == "--animations" {
+			skip["animations"] = true
 		} else if strings.HasPrefix(a, "--skip=") {
 			addSkip(skip, a)
 		} else if !strings.HasPrefix(a, "--") {
@@ -315,9 +329,19 @@ func handleOn(client *adb.Client, args []string) {
 	count, _ := client.Slim(serial, aggressive, keepPackages, skip)
 	fmt.Printf("   -> Successfully disabled %d packages.\n\n", count)
 
-	fmt.Println("2. Tuned system settings (animations 0x, background limit 4, sync off, location off).")
-	if len(skip) > 0 {
-		fmt.Printf("   Left unchanged (--skip): %s\n", strings.Join(sortedKeys(skip), ", "))
+	if skip["animations"] {
+		fmt.Println("2. Tuned system settings (animations ON, background limit 4, sync off, location off).")
+	} else {
+		fmt.Println("2. Tuned system settings (animations 0x, background limit 4, sync off, location off).")
+	}
+	var leftUnchanged []string
+	for _, k := range sortedKeys(skip) {
+		if k != "animations" {
+			leftUnchanged = append(leftUnchanged, k)
+		}
+	}
+	if len(leftUnchanged) > 0 {
+		fmt.Printf("   Left unchanged (--skip): %s\n", strings.Join(leftUnchanged, ", "))
 	}
 	fmt.Println("3. Purged cached processes and trimmed memory.")
 	fmt.Println()
@@ -361,6 +385,104 @@ func handleOff(client *adb.Client, args []string) {
 	fmt.Printf("   -> Restored %d packages.\n\n", count)
 	fmt.Println("2. Restored the system settings avdslim changed to their previous values.")
 	fmt.Printf("✅ Successfully restored %s to stock configuration.\n\n", serial)
+}
+
+func handleEnable(client *adb.Client, args []string) {
+	all := false
+	var filtered []string
+	for _, a := range args {
+		if a == "--all" {
+			all = true
+		} else {
+			filtered = append(filtered, a)
+		}
+	}
+
+	if len(filtered) == 0 {
+		fmt.Println("❌ Please specify a feature or package to enable.")
+		fmt.Println("Usage: avdslim enable <feature|package> [device] [--all]")
+		fmt.Println("\nFeatures:    bluetooth, animations, sync, location, bglimit")
+		fmt.Println("App Aliases: maps, photos, chrome, camera, store, youtube, phone, contacts")
+		fmt.Println("\nExamples:")
+		fmt.Println("  avdslim enable bluetooth")
+		fmt.Println("  avdslim enable maps 1")
+		fmt.Println("  avdslim enable animations Slim_Pixel_5")
+		fmt.Println("  avdslim enable sync --all")
+		return
+	}
+
+	running, err := client.GetRunningEmulators()
+	if err != nil || len(running) == 0 {
+		fmt.Println("❌ No running Android emulators detected via adb.")
+		return
+	}
+
+	var target, deviceArg string
+	if len(filtered) == 1 {
+		target = filtered[0]
+	} else {
+		if isDeviceSpecifier(client, running, filtered[0]) {
+			deviceArg = filtered[0]
+			target = filtered[1]
+		} else {
+			target = filtered[0]
+			deviceArg = filtered[1]
+		}
+	}
+
+	var devicesToEnable []string
+	if all {
+		for _, r := range running {
+			devicesToEnable = append(devicesToEnable, r.Serial)
+		}
+	} else if deviceArg != "" {
+		serial, err := client.ResolveDevice([]string{deviceArg})
+		if err != nil {
+			fmt.Printf("❌ %v\n", err)
+			return
+		}
+		devicesToEnable = []string{serial}
+	} else {
+		serial, err := client.ResolveDevice(nil)
+		if err != nil {
+			fmt.Printf("❌ %v\n", err)
+			return
+		}
+		devicesToEnable = []string{serial}
+	}
+
+	for _, serial := range devicesToEnable {
+		actions, err := client.Enable(serial, target)
+		if err != nil {
+			fmt.Printf("❌ [%s] %v\n", serial, err)
+			continue
+		}
+		fmt.Printf("⚡ Re-enabling %q on %s:\n", target, serial)
+		for _, act := range actions {
+			fmt.Printf("   ✓ %s\n", act)
+		}
+		fmt.Printf("✅ Successfully enabled %s on %s!\n\n", target, serial)
+	}
+}
+
+func isDeviceSpecifier(client *adb.Client, running []adb.RunningEmulator, s string) bool {
+	if _, err := strconv.Atoi(s); err == nil {
+		return true
+	}
+	if strings.HasPrefix(s, "emulator-") {
+		return true
+	}
+	for _, r := range running {
+		if strings.EqualFold(r.Serial, s) {
+			return true
+		}
+		nameOut, _ := client.Exec("-s", r.Serial, "emu", "avd", "name")
+		avdName := strings.TrimSpace(strings.Split(nameOut, "\n")[0])
+		if avdName != "" && strings.EqualFold(avdName, s) {
+			return true
+		}
+	}
+	return false
 }
 
 func selectAvdInteractively(installed []map[string]string, promptTitle string) (string, error) {
@@ -493,7 +615,8 @@ func handleLaunch(client *adb.Client, args []string) {
 
 	var slimArgs []string
 	for _, a := range options {
-		if a == "--aggressive" || strings.HasPrefix(a, "--keep=") || strings.HasPrefix(a, "--skip=") {
+		if a == "--aggressive" || strings.HasPrefix(a, "--keep=") || strings.HasPrefix(a, "--skip=") ||
+			a == "--no-anim" || a == "--no-animations" || a == "--anim" || a == "--animations" {
 			slimArgs = append(slimArgs, a)
 		} else if a == "--no-slim" {
 			doSlim = false
@@ -734,7 +857,7 @@ func findEmulator() string {
 func handleWatch(client *adb.Client, args []string) {
 	aggressive := false
 	var keepPackages []string
-	skip := make(map[string]bool)
+	skip := newDefaultSkip()
 	for _, a := range args {
 		if a == "--aggressive" {
 			aggressive = true
@@ -743,6 +866,10 @@ func handleWatch(client *adb.Client, args []string) {
 			if pkg != "" {
 				keepPackages = append(keepPackages, pkg)
 			}
+		} else if a == "--no-anim" || a == "--no-animations" {
+			delete(skip, "animations")
+		} else if a == "--anim" || a == "--animations" {
+			skip["animations"] = true
 		} else if strings.HasPrefix(a, "--skip=") {
 			addSkip(skip, a)
 		}
@@ -856,6 +983,13 @@ func handleBench(client *adb.Client, args []string) {
 		rssSavingPct = int(((float64(baselineRss) - float64(rssMb)) / float64(baselineRss)) * 100)
 	}
 
+	animDesc := "1.0x (Stock Fluid) "
+	if scaleOut, err := client.Exec("-s", serial, "shell", "settings", "get", "global", "window_animation_scale"); err == nil {
+		if strings.TrimSpace(scaleOut) == "0" {
+			animDesc = "0x (Zero GPU Churn)  100%"
+		}
+	}
+
 	fmt.Printf(`════════════════════════════════════════════════════════════════════════
  ⚡ AVD-SLIM Live Efficiency Scoreboard: %s
 ════════════════════════════════════════════════════════════════════════
@@ -865,11 +999,11 @@ func handleBench(client *adb.Client, args []string) {
  Physical Resident RAM (RSS) 2,800 MB (2.8 GB) %5d MB (%3.1f GB)   -%d%% ⚡
  Disabled Background Bloat   0 packages        %2d packages disabled
  Dalvik / ART Heap Ceiling   512 MB            256 MB (Compact)    -50%%
- Display Animations / Churn  1.0x Scale        0x (Zero GPU Churn)  100%%
+ Display Animations / Churn  1.0x Scale        %s
  ───────────────────────────────────────────────────────────────────────
  🛡️  Fidelity: 100%% FCM Push, Firebase Auth, WebView & Sockets Guaranteed
 ════════════════════════════════════════════════════════════════════════
-`, serial, footprintMb, float64(footprintMb)/1024.0, fpSavingPct, rssMb, float64(rssMb)/1024.0, rssSavingPct, disabledCount)
+`, serial, footprintMb, float64(footprintMb)/1024.0, fpSavingPct, rssMb, float64(rssMb)/1024.0, rssSavingPct, disabledCount, animDesc)
 }
 
 func handleInstallShim(args []string) {
@@ -922,7 +1056,7 @@ func handleBake(client *adb.Client, args []string) {
 	aggressive := false
 	headless := false
 	var keepPackages []string
-	skip := make(map[string]bool)
+	skip := newDefaultSkip()
 
 	for _, a := range args {
 		if strings.HasPrefix(a, "--skip=") {
@@ -935,6 +1069,10 @@ func handleBake(client *adb.Client, args []string) {
 			aggressive = true
 		} else if a == "--headless" || a == "--no-window" {
 			headless = true
+		} else if a == "--no-anim" || a == "--no-animations" {
+			delete(skip, "animations")
+		} else if a == "--anim" || a == "--animations" {
+			skip["animations"] = true
 		} else if strings.HasPrefix(a, "--keep=") {
 			pkg := strings.TrimPrefix(a, "--keep=")
 			if pkg != "" {
@@ -1112,13 +1250,17 @@ func handleSnapshot(client *adb.Client, args []string) {
 	aggressive := false
 	snapName := "avdslim_clean"
 	var keepPackages []string
-	skip := make(map[string]bool)
+	skip := newDefaultSkip()
 
 	for _, a := range args {
 		if a == "--skip-slim" || a == "--no-prune" {
 			skipSlim = true
 		} else if strings.HasPrefix(a, "--skip=") {
 			addSkip(skip, a)
+		} else if a == "--no-anim" || a == "--no-animations" {
+			delete(skip, "animations")
+		} else if a == "--anim" || a == "--animations" {
+			skip["animations"] = true
 		} else if a == "--aggressive" {
 			aggressive = true
 		} else if a == "--live" || a == "--current" {

@@ -116,6 +116,7 @@ func TuneAvd(targetAvd string, ramMb, heapMb int, gpuMode string) error {
 	kv["hw.gpu.mode"] = gpuMode
 	kv["hw.gpu.enabled"] = "yes"
 	kv["hw.keyboard"] = "yes"
+	kv["hw.cpu.ncore"] = "2"
 	kv["hw.dPad"] = "no"
 	kv["fastboot.forceColdBoot"] = "yes"
 	kv["fastboot.forceFastBoot"] = "no"

@@ -24,6 +24,7 @@ case "$1 $2" in
   "settings get") cat "$D/$3_$4" 2>/dev/null || echo null ;;
   "settings put") printf '%s' "$5" > "$D/$3_$4" ;;
   "settings delete") rm -f "$D/$3_$4" ;;
+  "pm enable") echo "Package $3 new state: enabled" ;;
   "cat "*) cat "$D/state" 2>/dev/null ;;
   "rm -f") rm -f "$D/state" ;;
   "echo "*) v="$2"; v="${v#\'}"; printf '%s' "${v%\'}" > "$D/state" ;;
@@ -77,6 +78,7 @@ func TestSlimRestoreIsExactInverse(t *testing.T) {
 		{"global", "background_process_limit", "<unset>"},
 		{"global", "auto_sync", "1"},
 		{"secure", "location_mode", "<unset>"},
+		{"global", "bluetooth_on", "<unset>"},
 	} {
 		if got := setting(t, dir, tc.ns, tc.name); got != tc.want {
 			t.Errorf("after restore %s = %q, want %q", tc.name, got, tc.want)
@@ -145,5 +147,45 @@ func TestResolveDevice(t *testing.T) {
 	// AVD name selects matching device
 	if got, err := c.ResolveDevice([]string{"Pixel_10_Pro"}); err != nil || got != "emulator-5556" {
 		t.Fatalf("ResolveDevice([Pixel_10_Pro]) = %q, %v; want emulator-5556", got, err)
+	}
+}
+
+func TestEnableTarget(t *testing.T) {
+	c, dir := newFake(t)
+
+	// Slim the device first
+	c.Slim("e", false, nil, nil)
+	if got := setting(t, dir, "global", "bluetooth_on"); got != "0" {
+		t.Fatalf("after slim bluetooth_on = %q, want 0", got)
+	}
+
+	// Re-enable bluetooth via Enable
+	actions, err := c.Enable("e", "bluetooth")
+	if err != nil {
+		t.Fatalf("Enable(bluetooth) error: %v", err)
+	}
+	if len(actions) == 0 {
+		t.Fatalf("expected actions for Enable(bluetooth), got none")
+	}
+	if got := setting(t, dir, "global", "bluetooth_on"); got != "1" {
+		t.Fatalf("after enable bluetooth_on = %q, want 1", got)
+	}
+
+	// Re-enable animations via Enable
+	actions, err = c.Enable("e", "animations")
+	if err != nil {
+		t.Fatalf("Enable(animations) error: %v", err)
+	}
+	if got := setting(t, dir, "global", "window_animation_scale"); got != "1" {
+		t.Fatalf("after enable window_animation_scale = %q, want 1", got)
+	}
+
+	// Re-enable an app alias (maps)
+	actions, err = c.Enable("e", "maps")
+	if err != nil {
+		t.Fatalf("Enable(maps) error: %v", err)
+	}
+	if len(actions) == 0 {
+		t.Fatalf("expected package enabled for maps, got none")
 	}
 }

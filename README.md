@@ -69,9 +69,9 @@ Just like `simslim` silences iOS simulators via `launchctl`, `avdslim`:
    - **Linux / Ubuntu (Desktop)**: Native DRI / OpenGL / Vulkan via Mesa / NVIDIA drivers (`/dev/dri`).
    - **Linux / Ubuntu (Headless CI / Docker)**: Auto-detects headless environments (no `$DISPLAY`) and uses Google SwiftShader (`-gpu swiftshader_indirect`) to avoid display server crashes while bounding memory.
    - **Windows 10 / 11**: Direct3D 11 via ANGLE or native Desktop OpenGL / Vulkan.
-3. **Disables 24+ Bloat Daemons**: Silences non-essential Google background services via `pm disable-user --user 0`.
-4. **Eliminates Animation Lag**: Sets window, transition, and animator scales to 0x.
-5. **Limits Background Churn**: Caps `background_process_limit = 4` (protecting OAuth and biometrics) and disables auto-sync.
+3. **Disables 45+ Bloat Daemons**: Silences non-essential Google background services (Bluetooth, Privacy Sandbox, telemetry, wearable/camera stubs) via `pm disable-user --user 0`.
+4. **Fluid or Zero-Latency Animations**: Fluid 1.0x animations by default; toggleable to 0x instant transitions via `--no-anim`.
+5. **Limits Background Churn**: Caps `background_process_limit = 4` and `max_cached_processes = 4` (protecting OAuth and biometrics) and disables auto-sync.
 6. **Drops Caches**: Flushes Linux page caches and compacts memory heaps.
 
 ---
@@ -207,7 +207,29 @@ avdslim off
 
 ---
 
-### 8. Slim an Active Emulator (`on`)
+### 8. Selectively Re-enable Features (`enable`)
+Want to turn on just **one feature or app** on a running, slimmed AVD without doing a full restore? Use `avdslim enable`:
+```bash
+# Enable by feature:
+avdslim enable bluetooth
+avdslim enable animations
+avdslim enable sync
+avdslim enable location
+
+# Enable by app alias or package:
+avdslim enable maps
+avdslim enable chrome
+avdslim enable com.google.android.apps.photos
+
+# Target specific emulator (when multiple are running):
+avdslim enable bluetooth 1               # by index (1, 2)
+avdslim enable maps Slim_Pixel_5         # by AVD name
+avdslim enable bluetooth --all           # across all running emulators
+```
+
+---
+
+### 9. Slim an Active Emulator (`on`)
 Immediately silences background bloat and trims memory on a running emulator:
 ```bash
 # Standard preset (safe for all apps):
@@ -219,15 +241,19 @@ avdslim on --aggressive
 # Keep a specific app (e.g. Google Maps):
 avdslim on --keep=com.google.android.apps.maps
 
+# Disable animations for instant, zero-latency transitions (otherwise ON by default):
+avdslim on --no-anim
+
 # Leave some settings alone:
-avdslim on --skip=animations,sync
+avdslim on --skip=sync,location
 ```
-`--skip` also works with `watch`, `start`, `bake` and `snapshot`. Groups:
+`--no-anim` (or `--skip`) also works with `watch`, `start`, `bake` and `snapshot`. Groups:
 
 | Group | Settings left unchanged |
 | :--- | :--- |
-| `animations` | window, transition and animator scales (otherwise 0x) |
-| `bglimit` | `background_process_limit` (otherwise 4) |
+| `animations` | window, transition and animator scales (ON by default; disable with `--no-anim`) |
+| `bluetooth` | `bluetooth_on` & Bluetooth packages (otherwise disabled to save ~25 MB RAM) |
+| `bglimit` | `max_cached_processes` & `background_process_limit` (otherwise 4) |
 | `sync` | `auto_sync` (otherwise off) |
 | `location` | `location_mode` (otherwise off) |
 | `setup` | `user_setup_complete`, `device_provisioned` (otherwise marked done) |
