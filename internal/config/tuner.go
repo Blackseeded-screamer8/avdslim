@@ -86,9 +86,16 @@ func TuneAvd(targetAvd string, ramMb, heapMb int, gpuMode string) error {
 		return err
 	}
 
+	// Abort before touching config.ini or snapshots if the backup cannot be
+	// made: tuning is only reversible while the .bak exists.
 	backupFile := fileToTune + ".bak"
-	if _, err := os.Stat(backupFile); os.IsNotExist(err) {
-		_ = os.WriteFile(backupFile, data, 0644)
+	if _, err := os.Stat(backupFile); err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("cannot check backup %s: %w", backupFile, err)
+		}
+		if err := os.WriteFile(backupFile, data, 0644); err != nil {
+			return fmt.Errorf("refusing to tune %q without a backup: %w", avdName, err)
+		}
 		fmt.Printf("   ✓ Created backup: %s\n", backupFile)
 	}
 

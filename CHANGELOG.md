@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **`tune-avd` could rewrite `config.ini` with no backup**: the `config.ini.bak` write ignored its error but still reported success, so a failed backup (permissions, full disk) left the tune irreversible once `config.ini` was rewritten and `snapshots/` purged. It now aborts before touching either.
+
 ## v1.0.10 — 2026-09-17
 
 ### Fixed
