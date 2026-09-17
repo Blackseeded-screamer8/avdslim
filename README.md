@@ -42,7 +42,7 @@ When creating Virtual Devices in **Android Studio Device Manager**, your choice 
 
 | System Image Type | Status | Why? |
 | :--- | :---: | :--- |
-| **Google APIs** *(Standard 4 KB)* | ✅ **ALWAYS USE (Best)** | **100% Firebase Auth, FCM Push & Maps active** with zero Play Store background updaters. Allows `adb root` so `avdslim` can compact kernel memory. **Runs ultra-smooth at 1024 MB RAM**. |
+| **Google APIs** *(Standard 4 KB)* | ✅ **ALWAYS USE (Best)** | **100% Firebase Auth, FCM Push & Maps active** with zero Play Store background updaters. Allows `adb root` so `avdslim` can compact kernel memory. **Runs ultra-smooth at 1536 MB RAM**. |
 | **Google Play** | ❌ **AVOID** | Runs heavy Play Store self-updaters and background Play Protect scanning loops. Production build locks out `adb root` (cannot flush kernel caches). Consumes ~40% more RAM. |
 | **16 KB Page Size** *(`ps16k`)* | ❌ **AVOID** | Hardcodes a **4,096 MB minimum RAM ceiling in QEMU** (ignoring low-memory flags). Uses 4x larger page buffers. Only use if specifically debugging 16K native C/C++ alignment. |
 
@@ -135,7 +135,7 @@ Prefer clicking the green **"Play"** button in Android Studio? Wrap the SDK emul
 ```bash
 avdslim install-shim
 ```
-* **Zero workflow changes**: Android Studio launches automatically stay slimmed (1024 MB, `-lowram`, Metal GPU).
+* **Zero workflow changes**: Android Studio launches automatically stay slimmed (1536 MB, `-lowram`, Metal GPU).
 * **Safe & reversible anytime**: `avdslim uninstall-shim` restores the original SDK binary instantly.
 * **After an emulator update in Android Studio**, the SDK Manager replaces the shim and launches go back to stock. `avdslim doctor` and `avdslim watch` warn about it; run `avdslim install-shim` again. An update can also invalidate the golden snapshot, so re-run `avdslim bake` if boots are slow again.
 * **Not supported on Windows**: Android Studio runs `emulator.exe` directly, so a script wrapper can't replace it. Use `avdslim start` and `avdslim tune-avd` instead.
@@ -259,9 +259,9 @@ avdslim measure emulator-5554
 ### 10. Tune Host AVD Configuration (`tune-avd`)
 Configures an AVD's `config.ini` for optimal memory consumption and purges stale snapshots:
 ```bash
-avdslim tune-avd Pixel_10_Pro --ram=1024 --heap=256
+avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
 ```
-* Sets `hw.ramSize = 1024`
+* Sets `hw.ramSize = 1536`
 * Sets `hw.gpu.mode = host` (Apple Silicon Metal hardware acceleration)
 * Disables camera and audio emulation threads
 * Purges stale `hardware-qemu.ini` and snapshots
@@ -271,7 +271,7 @@ avdslim tune-avd Pixel_10_Pro --ram=1024 --heap=256
 ### 11. Restart Emulator with Clean Cache (`restart`)
 Gracefully shuts down the emulator, purges stale runtime snapshots, and relaunches with low-memory host flags:
 ```bash
-avdslim restart emulator-5554 --ram=1024
+avdslim restart emulator-5554 --ram=1536
 ```
 
 ---
@@ -295,7 +295,7 @@ avdslim start 1 --headless
 avdslim start 1 --cold
 
 # Custom RAM allocation
-avdslim run Pixel_10_Pro --ram=1024
+avdslim run Pixel_10_Pro --ram=1536
 
 # Skip auto-slimming if you need stock services untouched
 avdslim start 1 --no-slim
@@ -343,7 +343,7 @@ Slash CI runner memory and run parallel emulator shards on free GitHub Actions r
 - name: AVD-SLIM — Android Emulator RAM & CI Optimizer
   uses: kdbhalala/avdslim@v1
   with:
-    ram: '1024'
+    ram: '1536'
     install-shim: 'true'
 ```
 

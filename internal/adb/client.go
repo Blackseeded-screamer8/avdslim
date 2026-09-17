@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -134,21 +135,61 @@ func (c *Client) GetRunningEmulators() ([]RunningEmulator, error) {
 }
 
 func (c *Client) ResolveDevice(args []string) (string, error) {
-	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
-		return args[0], nil
+	var target string
+	for _, a := range args {
+		if !strings.HasPrefix(a, "--") && !strings.HasPrefix(a, "-") {
+			target = a
+			break
+		}
 	}
+
 	running, err := c.GetRunningEmulators()
 	if err != nil || len(running) == 0 {
 		return "", fmt.Errorf("no running Android emulator found via adb")
 	}
+
+	if target != "" {
+		// 1. Check numeric 1-based index (e.g. "1", "2")
+		if idx, err := strconv.Atoi(target); err == nil {
+			if idx >= 1 && idx <= len(running) {
+				return running[idx-1].Serial, nil
+			}
+			return "", fmt.Errorf("invalid emulator index %d (only %d running emulator(s))", idx, len(running))
+		}
+
+		// 2. Check exact serial match (e.g. "emulator-5554")
+		for _, r := range running {
+			if strings.EqualFold(r.Serial, target) {
+				return r.Serial, nil
+			}
+		}
+
+		// 3. Check AVD name match (e.g. "Slim_Pixel_5")
+		for _, r := range running {
+			nameOut, _ := c.Exec("-s", r.Serial, "emu", "avd", "name")
+			avdName := strings.TrimSpace(strings.Split(nameOut, "\n")[0])
+			if strings.EqualFold(avdName, target) {
+				return r.Serial, nil
+			}
+		}
+
+		return "", fmt.Errorf("emulator %q not found among running emulators", target)
+	}
+
 	if len(running) == 1 {
 		return running[0].Serial, nil
 	}
+
 	fmt.Println("⚠️  Multiple emulators running. Please specify one:")
-	for _, r := range running {
-		fmt.Printf("  • %s (%s)\n", r.Serial, r.Model)
+	for i, r := range running {
+		nameOut, _ := c.Exec("-s", r.Serial, "emu", "avd", "name")
+		avdName := strings.TrimSpace(strings.Split(nameOut, "\n")[0])
+		if avdName == "" {
+			avdName = r.Model
+		}
+		fmt.Printf("  [%d] %s (%s)\n", i+1, r.Serial, avdName)
 	}
-	return "", fmt.Errorf("device serial required")
+	return "", fmt.Errorf("device serial or index required")
 }
 
 // Slim disables bloat packages and applies tweaks, except groups in skip.

@@ -115,6 +115,7 @@ func TuneAvd(targetAvd string, ramMb, heapMb int, gpuMode string) error {
 	kv["hw.audioOutput"] = "no"
 	kv["hw.gpu.mode"] = gpuMode
 	kv["hw.gpu.enabled"] = "yes"
+	kv["hw.keyboard"] = "yes"
 	kv["hw.dPad"] = "no"
 	kv["fastboot.forceColdBoot"] = "yes"
 	kv["fastboot.forceFastBoot"] = "no"
@@ -145,7 +146,7 @@ func TuneAvd(targetAvd string, ramMb, heapMb int, gpuMode string) error {
 	isPlayStore := strings.ToLower(kv["PlayStore.enabled"]) == "true" || strings.ToLower(kv["PlayStore.enabled"]) == "yes" || strings.Contains(kv["tag.id"], "playstore")
 	if is16K {
 		fmt.Println("   🚨 Note: This AVD uses a 16 KB page-size image. QEMU enforces a 4096 MB RAM floor.")
-		fmt.Println("      💡 Recommendation: For daily dev at 1024 MB RAM, use standard 4 KB 'Google APIs'.")
+		fmt.Println("      💡 Recommendation: For daily dev at 1536 MB RAM, use standard 4 KB 'Google APIs'.")
 	} else if isPlayStore {
 		fmt.Println("   ⚠️  Note: This AVD uses 'Google Play' (locks guest root & runs background updaters).")
 		fmt.Println("      💡 Recommendation: For lowest RAM usage, use 'Google APIs' instead.")

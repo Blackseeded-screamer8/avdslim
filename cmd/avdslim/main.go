@@ -149,19 +149,19 @@ Commands:
   restore, off         Instant 100%% stock restore (re-enables packages, animations & sync)
   watch                Auto-detect & slim new emulators as soon as they boot
                        Options: --aggressive, --keep=<package>, --skip=<groups>
-  tune-avd [avd_name]  Tune host AVD config.ini (RAM=1024M, Metal GPU, no cameras)
-                       Options: --ram=<MB> (default: 1024), --heap=<MB> (default: 256)
+  tune-avd [avd_name]  Tune host AVD config.ini (RAM=1536M, Metal GPU, no cameras)
+                       Options: --ram=<MB> (default: 1536), --heap=<MB> (default: 256)
   start, run, launch [avd] Launch AVD with low-memory host flags & auto-slim upon boot
-                       Options: --no-slim, --no-lowram, --headless, --cold, --ram=<MB> (default: 1024)
+                       Options: --no-slim, --no-lowram, --headless, --cold, --ram=<MB> (default: 1536)
   stop, kill [device]  Gracefully shut down emulator (Options: --snap, -f)
   bake [avd_name]      Create local Golden Snapshot (pruned & slimmed) for ~1.5s instant boots
-                       Options: --ram=<MB> (default: 1024), --aggressive, --skip=<groups>, --headless, --live
+                       Options: --ram=<MB> (default: 1536), --aggressive, --skip=<groups>, --headless, --live
   snapshot, snap       Capture running emulator (with pre-installed apps & test logins)
                        into Golden Snapshot for instant <1.5s restores
   unbake [avd_name]    Delete Golden Snapshot and return AVD to stock cold boots
   bench [device]       Show before/after memory & CPU efficiency scoreboard
   install-shim         Wrap SDK emulator binary so Android Studio launches stay slim
-                       Options: --ram=<MB> (default: 1024)
+                       Options: --ram=<MB> (default: 1536)
   uninstall-shim       Restore stock Android SDK emulator binary
   doctor               Audit environment, AVDs, system image 16K overhead & toolchain
   profiles             List all bloat categories, packages & guaranteed-working services
@@ -175,7 +175,7 @@ Examples:
   avdslim on --aggressive
   avdslim on --keep=com.google.android.apps.maps
   avdslim on --skip=animations,sync
-  avdslim tune-avd Pixel_10_Pro --ram=1024
+  avdslim tune-avd Pixel_10_Pro --ram=1536
   avdslim restart
 
 Defaults:
@@ -416,7 +416,7 @@ func selectAvdInteractively(installed []map[string]string, promptTitle string) (
 }
 
 func handleTuneAvd(args []string) {
-	ramMb := 1024
+	ramMb := 1536
 	heapMb := 256
 	gpuMode := ""
 	targetAvd := ""
@@ -488,7 +488,7 @@ func handleLaunch(client *adb.Client, args []string) {
 	lowRam := true
 	headless := false
 	forceCold := false
-	ramMb := 1024
+	ramMb := 1536
 	gpuMode := config.GetRecommendedGpuMode()
 
 	var slimArgs []string
@@ -582,7 +582,7 @@ func handleLaunch(client *adb.Client, args []string) {
 }
 
 func handleStop(client *adb.Client, args []string) {
-	var serial string
+	var target string
 	snap := false
 	force := false
 
@@ -592,7 +592,7 @@ func handleStop(client *adb.Client, args []string) {
 		} else if a == "-f" || a == "--force" || a == "--no-snap" {
 			force = true
 		} else if !strings.HasPrefix(a, "--") {
-			serial = a
+			target = a
 		}
 	}
 
@@ -602,25 +602,35 @@ func handleStop(client *adb.Client, args []string) {
 		return
 	}
 
-	if serial == "" {
-		if len(running) == 1 {
-			serial = running[0].Serial
+	var serial string
+	if target != "" {
+		s, err := client.ResolveDevice([]string{target})
+		if err != nil {
+			fmt.Printf("❌ %v\n", err)
+			return
+		}
+		serial = s
+	} else if len(running) == 1 {
+		serial = running[0].Serial
+	} else {
+		fmt.Println("📱 Running Emulators:")
+		for i, emu := range running {
+			nameOut, _ := client.Exec("-s", emu.Serial, "emu", "avd", "name")
+			name := strings.TrimSpace(strings.Split(nameOut, "\n")[0])
+			if name == "" {
+				name = emu.Model
+			}
+			fmt.Printf("   [%d] %s (%s)\n", i+1, emu.Serial, name)
+		}
+		fmt.Print("\nSelect an emulator to stop (number): ")
+		reader := bufio.NewReader(os.Stdin)
+		text, _ := reader.ReadString('\n')
+		text = strings.TrimSpace(text)
+		if idx, err := strconv.Atoi(text); err == nil && idx >= 1 && idx <= len(running) {
+			serial = running[idx-1].Serial
 		} else {
-			fmt.Println("📱 Running Emulators:")
-			for i, emu := range running {
-				nameOut, _ := client.Exec("-s", emu.Serial, "emu", "avd", "name")
-				name := strings.TrimSpace(strings.Split(nameOut, "\n")[0])
-				fmt.Printf("   [%d] %s (%s)\n", i+1, emu.Serial, name)
-			}
-			fmt.Print("\nSelect an emulator to stop (number): ")
-			reader := bufio.NewReader(os.Stdin)
-			text, _ := reader.ReadString('\n')
-			text = strings.TrimSpace(text)
-			if idx, err := strconv.Atoi(text); err == nil && idx >= 1 && idx <= len(running) {
-				serial = running[idx-1].Serial
-			} else {
-				serial = running[0].Serial
-			}
+			fmt.Println("❌ Invalid selection.")
+			return
 		}
 	}
 
@@ -649,13 +659,19 @@ func handleStop(client *adb.Client, args []string) {
 	fmt.Printf("🛑 Gracefully shutting down %s (%s)...\n", serial, avdName)
 	client.Exec("-s", serial, "emu", "kill")
 
+	stopped := false
 	for i := 0; i < 10; i++ {
 		time.Sleep(1 * time.Second)
 		if pid := host.FindHostPidForSerial(serial); pid == 0 {
+			stopped = true
 			break
 		}
 	}
-	fmt.Println("✓ Emulator process stopped cleanly.")
+	if stopped {
+		fmt.Println("✓ Emulator process stopped cleanly.")
+	} else {
+		fmt.Printf("⚠️  Emulator %s did not stop within 10s.\n", serial)
+	}
 	fmt.Println()
 }
 
@@ -857,7 +873,7 @@ func handleBench(client *adb.Client, args []string) {
 }
 
 func handleInstallShim(args []string) {
-	ramMb := 1024
+	ramMb := 1536
 	for _, a := range args {
 		if strings.HasPrefix(a, "--ram=") {
 			if v, err := strconv.Atoi(strings.TrimPrefix(a, "--ram=")); err == nil {
@@ -902,7 +918,7 @@ func handleBake(client *adb.Client, args []string) {
 
 	installed := config.GetInstalledAvds()
 	var targetAvd string
-	ramMb := 1024
+	ramMb := 1536
 	aggressive := false
 	headless := false
 	var keepPackages []string
@@ -1132,13 +1148,18 @@ func handleSnapshot(client *adb.Client, args []string) {
 		return
 	}
 
-	if serial == "" {
-		if len(running) == 1 {
-			serial = running[0].Serial
-		} else {
-			fmt.Printf("Multiple running emulators detected. Using %s\n", running[0].Serial)
-			serial = running[0].Serial
+	if serial != "" {
+		s, err := client.ResolveDevice([]string{serial})
+		if err != nil {
+			fmt.Printf("❌ %v\n", err)
+			return
 		}
+		serial = s
+	} else if len(running) == 1 {
+		serial = running[0].Serial
+	} else {
+		fmt.Printf("Multiple running emulators detected. Using %s\n", running[0].Serial)
+		serial = running[0].Serial
 	}
 
 	// Get AVD Name

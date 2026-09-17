@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/kdbhalala/avdslim/internal/adb"
@@ -118,15 +119,21 @@ func RunDoctor(client *adb.Client) {
 			if ram == "1024" || ram == "1536" || ram == "1280" {
 				fmt.Printf("     ✓ Tuned low-RAM allocation: %s MB\n", ram)
 			} else {
-				fmt.Printf("     ⚠️  High RAM allocated: %s MB (Recommend: 1024 MB via `avdslim tune-avd %s`)\n", ram, name)
+				fmt.Printf("     ⚠️  High RAM allocated: %s MB (Recommend: 1536 MB via `avdslim tune-avd %s`)\n", ram, name)
 				issuesCount++
 			}
 
 			// Check GPU Mode
-			if gpu == "host" || gpu == "swiftshader_indirect" || gpu == "angle_indirect" {
-				fmt.Printf("     ✓ Hardware GPU acceleration enabled: %s (%s)\n", gpu, config.GetGpuBackendDescription(gpu))
+			recGpu := config.GetRecommendedGpuMode()
+			if gpu == "host" || gpu == "auto" || gpu == "swiftshader_indirect" || gpu == "angle_indirect" {
+				if runtime.GOOS == "darwin" && gpu == "auto" {
+					fmt.Printf("     ⚠️  GPU Mode is %q (Recommend: `host` for native Apple Silicon Metal acceleration)\n", gpu)
+					issuesCount++
+				} else {
+					fmt.Printf("     ✓ Hardware GPU acceleration enabled: %s (%s)\n", gpu, config.GetGpuBackendDescription(gpu))
+				}
 			} else {
-				fmt.Printf("     ⚠️  GPU Mode is %q (Recommend: `host` for native hardware acceleration)\n", gpu)
+				fmt.Printf("     ⚠️  GPU Mode is %q (Recommend: `%s` for native hardware acceleration)\n", gpu, recGpu)
 				issuesCount++
 			}
 
@@ -196,7 +203,7 @@ func RunDoctor(client *adb.Client) {
 	fmt.Println("│  ✅ ALWAYS CHOOSE: \"Google APIs\" (Standard 4 KB pages)                 │")
 	fmt.Println("│     • 100% Firebase Auth, FCM Push, Google Sign-In & Maps support       │")
 	fmt.Println("│     • Guest root (`adb root`) enabled for instant kernel cache drops   │")
-	fmt.Println("│     • Runs smoothly with 1024 MB RAM (saves 60-70% host memory)        │")
+	fmt.Println("│     • Runs smoothly with 1536 MB RAM (saves 60-70% host memory)        │")
 	fmt.Println("│                                                                        │")
 	fmt.Println("│  ❌ AVOID: \"Google Play\"                                               │")
 	fmt.Println("│     • Adds heavy Play Store self-updaters & Play Protect scanning loops│")

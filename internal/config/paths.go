@@ -93,16 +93,18 @@ func FindEmulatorExecutable() string {
 // GetRecommendedGpuMode returns the optimal GPU acceleration mode for the current platform.
 func GetRecommendedGpuMode() string {
 	switch runtime.GOOS {
+	case "darwin":
+		return "host"
 	case "linux":
 		// On headless Linux (e.g. CI runner/Docker without X11 or Wayland display)
 		if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
 			return "swiftshader_indirect"
 		}
-		return "host"
-	case "windows", "darwin":
-		return "host"
+		return "auto"
+	case "windows":
+		return "auto"
 	default:
-		return "host"
+		return "auto"
 	}
 }
 
@@ -122,6 +124,15 @@ func GetGpuBackendDescription(gpuMode string) string {
 			return "Direct3D 11 via ANGLE / native Windows GPU acceleration"
 		default:
 			return "Host physical GPU acceleration"
+		}
+	case "auto":
+		switch runtime.GOOS {
+		case "windows":
+			return "Automatic (Direct3D 11 via ANGLE / native Windows GPU)"
+		case "linux":
+			return "Automatic (native DRI / OpenGL / Vulkan hardware)"
+		default:
+			return "Automatic GPU selection"
 		}
 	case "swiftshader_indirect":
 		return "Google SwiftShader optimized CPU software renderer (headless CI friendly)"

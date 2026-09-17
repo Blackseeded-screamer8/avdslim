@@ -11,6 +11,14 @@ import (
 // storing each setting as a file in dir.
 const fakeAdb = `#!/bin/bash
 D="$(dirname "$0")"
+if [ "$1" = "devices" ]; then
+  cat "$D/devices" 2>/dev/null || printf "List of devices attached\n"
+  exit 0
+fi
+if [ "$1" = "-s" ] && [ "$3" = "emu" ]; then
+  cat "$D/avd_$2" 2>/dev/null || echo "Test_AVD"
+  exit 0
+fi
 shift 2; shift # drop: -s SERIAL shell
 case "$1 $2" in
   "settings get") cat "$D/$3_$4" 2>/dev/null || echo null ;;
@@ -76,5 +84,66 @@ func TestSlimRestoreIsExactInverse(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "state")); err == nil {
 		t.Error("state file not removed")
+	}
+}
+
+func TestResolveDevice(t *testing.T) {
+	c, dir := newFake(t)
+
+	// Case 1: No devices running
+	if _, err := c.ResolveDevice(nil); err == nil {
+		t.Fatal("expected error when no devices are running")
+	}
+
+	// Case 2: One device running (emulator-5554, AVD: Slim_Pixel_5)
+	oneDevice := "List of devices attached\nemulator-5554\tdevice\n"
+	if err := os.WriteFile(filepath.Join(dir, "devices"), []byte(oneDevice), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "avd_emulator-5554"), []byte("Slim_Pixel_5\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Auto-selects single running device
+	if got, err := c.ResolveDevice(nil); err != nil || got != "emulator-5554" {
+		t.Fatalf("ResolveDevice(nil) = %q, %v; want emulator-5554", got, err)
+	}
+	// Selects by index 1
+	if got, err := c.ResolveDevice([]string{"1"}); err != nil || got != "emulator-5554" {
+		t.Fatalf("ResolveDevice([1]) = %q, %v; want emulator-5554", got, err)
+	}
+	// Selects by exact serial
+	if got, err := c.ResolveDevice([]string{"emulator-5554"}); err != nil || got != "emulator-5554" {
+		t.Fatalf("ResolveDevice([emulator-5554]) = %q, %v; want emulator-5554", got, err)
+	}
+	// Selects by AVD name
+	if got, err := c.ResolveDevice([]string{"Slim_Pixel_5"}); err != nil || got != "emulator-5554" {
+		t.Fatalf("ResolveDevice([Slim_Pixel_5]) = %q, %v; want emulator-5554", got, err)
+	}
+	// Index out of range
+	if _, err := c.ResolveDevice([]string{"2"}); err == nil {
+		t.Fatal("expected error for index 2 when only 1 device is running")
+	}
+	// Unknown name
+	if _, err := c.ResolveDevice([]string{"NonExistent"}); err == nil {
+		t.Fatal("expected error for non-existent device")
+	}
+
+	// Case 3: Two devices running
+	twoDevices := "List of devices attached\nemulator-5554\tdevice\nemulator-5556\tdevice\n"
+	if err := os.WriteFile(filepath.Join(dir, "devices"), []byte(twoDevices), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "avd_emulator-5556"), []byte("Pixel_10_Pro\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Index 2 selects second device
+	if got, err := c.ResolveDevice([]string{"2"}); err != nil || got != "emulator-5556" {
+		t.Fatalf("ResolveDevice([2]) = %q, %v; want emulator-5556", got, err)
+	}
+	// AVD name selects matching device
+	if got, err := c.ResolveDevice([]string{"Pixel_10_Pro"}); err != nil || got != "emulator-5556" {
+		t.Fatalf("ResolveDevice([Pixel_10_Pro]) = %q, %v; want emulator-5556", got, err)
 	}
 }

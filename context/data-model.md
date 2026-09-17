@@ -7,7 +7,7 @@ guest, or live emulator flags.
 
 - **AVD config** — `~/.android/avd/<name>.avd/config.ini` (or
   `$ANDROID_AVD_HOME`). Flat `key=value`, parsed into `map[string]string`
-  (`config.GetInstalledAvds`). Tuned keys: `hw.ramSize` (default 1024),
+  (`config.GetInstalledAvds`). Tuned keys: `hw.ramSize` (default 1536),
   `vm.heapSize` (256), `hw.gpu.mode`/`hw.gpu.enabled`, camera/audio off,
   `fastboot.forceColdBoot=yes`. One-time backup `config.ini.bak` (never
   overwritten once present). Owner: `internal/config/tuner.go`.
