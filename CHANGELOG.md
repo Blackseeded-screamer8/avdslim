@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.7 — 2026-09-17
+
+### Added
+- **OS-Specific GPU Backends**: Automatically selects `-gpu host` on macOS (native Apple Metal acceleration), `-gpu auto` on Linux and Windows (native DRI/Vulkan and Direct3D 11 via ANGLE), and `-gpu swiftshader_indirect` on headless Linux CI runners without display servers.
+- **Flexible Device Target Resolution**: Commands (`stop`, `snapshot`, `on`, `off`, `bench`) now accept numeric 1-based index numbers (`1`, `2`), AVD names (`Slim_Pixel_5`), or ADB serials (`emulator-5554`).
+- **Physical Keyboard Forwarding**: Automatically sets `hw.keyboard = yes` during `tune-avd` so typing on host keyboards works out-of-the-box inside the emulator.
+
+### Changed
+- **Default RAM Raised to 1536 MB**: Raised default guest RAM from 1024 MB to 1536 MB across CLI flags, Android Studio shim, AVD tuner, bake snapshots, and GitHub Actions workflows. Balances lightweight host memory (~1.7 GB) with guest OS `lmkd` headroom, preventing Gboard and dev application kills on Android API 34–37 images.
+
+### Fixed
+- Fixed `avdslim stop` to correctly target emulators by index, name, or serial with responsive termination polling.
+- Fixed `github-repo-stats` workflow downsampling ZeroDivisionError on new or sparse data branches.
+
 ## v1.0.6 — 2026-09-17
 
 ### Upgrading
