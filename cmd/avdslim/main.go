@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -692,6 +693,10 @@ func handleLaunch(client *adb.Client, args []string) {
 		emuArgs = append(emuArgs, "-no-window")
 	}
 
+	port := freeEmulatorPort(client)
+	serial := "emulator-" + strconv.Itoa(port)
+	emuArgs = append(emuArgs, "-port", strconv.Itoa(port))
+
 	hasGolden := config.HasGoldenSnapshot(avdName)
 	if hasGolden && !forceCold {
 		emuArgs = append(emuArgs, "-snapshot", "avdslim_clean", "-no-snapshot-save")
@@ -714,11 +719,11 @@ func handleLaunch(client *adb.Client, args []string) {
 
 	if doSlim {
 		fmt.Println("⏳ Waiting for emulator to finish booting...")
-		_, _ = client.Exec("wait-for-device")
+		_, _ = client.Exec("-s", serial, "wait-for-device")
 
 		booted := false
 		for i := 0; i < 60; i++ {
-			res, _ := client.Exec("shell", "getprop", "sys.boot_completed")
+			res, _ := client.Exec("-s", serial, "shell", "getprop", "sys.boot_completed")
 			if strings.TrimSpace(res) == "1" {
 				booted = true
 				break
@@ -729,11 +734,10 @@ func handleLaunch(client *adb.Client, args []string) {
 		if booted {
 			if hasGolden && !forceCold {
 				fmt.Println("✓ Instant boot complete via Golden Snapshot! Refreshing slim state...")
-				handleOn(client, slimArgs)
 			} else {
 				fmt.Println("✓ Boot complete! Applying avdslim optimizations...")
-				handleOn(client, slimArgs)
 			}
+			handleOn(client, append(slimArgs, serial))
 		} else {
 			fmt.Println("⚠️  Boot timed out after 120s. You can run `avdslim on` manually.")
 		}
@@ -884,6 +888,22 @@ func handleRestart(client *adb.Client, args []string) {
 		}
 	}
 	handleLaunch(client, launchArgs)
+}
+
+// freeEmulatorPort returns the console port a new emulator should take, so boot
+// waits and slimming target it and never another running AVD.
+func freeEmulatorPort(client *adb.Client) int {
+	devices, _ := client.Exec("devices")
+	for p := 5554; p <= 5682; p += 2 {
+		if strings.Contains(devices, "emulator-"+strconv.Itoa(p)+"\t") {
+			continue
+		}
+		if l, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p)); err == nil {
+			l.Close()
+			return p
+		}
+	}
+	return 5554
 }
 
 func findEmulator() string {
@@ -1172,6 +1192,9 @@ func handleBake(client *adb.Client, args []string) {
 		"-no-boot-anim",
 		"-no-snapshot-load",
 	}
+	port := freeEmulatorPort(client)
+	targetSerial := "emulator-" + strconv.Itoa(port)
+	emuArgs = append(emuArgs, "-port", strconv.Itoa(port))
 	if headless {
 		emuArgs = append(emuArgs, "-no-window")
 	}
@@ -1184,33 +1207,14 @@ func handleBake(client *adb.Client, args []string) {
 	}
 
 	fmt.Printf("✓ Emulator spawned (PID: %d). Waiting for boot completion...\n", cmd.Process.Pid)
-	_, _ = client.Exec("wait-for-device")
+	_, _ = client.Exec("-s", targetSerial, "wait-for-device")
 
-	// Wait for sys.boot_completed
-	var targetSerial string
 	booted := false
 	for i := 0; i < 90; i++ {
-		currentRunning, _ := client.GetRunningEmulators()
-		for _, emu := range currentRunning {
-			nameOut, _ := client.Exec("-s", emu.Serial, "emu", "avd", "name")
-			if strings.Contains(nameOut, targetAvd) {
-				targetSerial = emu.Serial
-				break
-			}
-		}
-		if targetSerial != "" {
-			res, _ := client.Exec("-s", targetSerial, "shell", "getprop", "sys.boot_completed")
-			if strings.TrimSpace(res) == "1" {
-				booted = true
-				break
-			}
-		} else if len(currentRunning) == 1 {
-			targetSerial = currentRunning[0].Serial
-			res, _ := client.Exec("-s", targetSerial, "shell", "getprop", "sys.boot_completed")
-			if strings.TrimSpace(res) == "1" {
-				booted = true
-				break
-			}
+		res, _ := client.Exec("-s", targetSerial, "shell", "getprop", "sys.boot_completed")
+		if strings.TrimSpace(res) == "1" {
+			booted = true
+			break
 		}
 		time.Sleep(2 * time.Second)
 	}
