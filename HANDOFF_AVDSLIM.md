@@ -78,6 +78,11 @@ cd /Users/krunalbhalala/Documents/Projects/avdslim
 # Restore emulator back to default factory state
 ./bin/avdslim off emulator-5554
 
+# Selectively re-enable a feature or app on a running emulator
+./bin/avdslim enable bluetooth emulator-5554
+./bin/avdslim enable maps 1
+./bin/avdslim enable sync --all
+
 # Tune an installed AVD config to permanently lock RAM & GPU settings
 ./bin/avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
 

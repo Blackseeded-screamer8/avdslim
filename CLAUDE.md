@@ -12,9 +12,9 @@ snapshot for ~1.5 s boots.
   `internal/doctor` (read-only audit).
 - State: host `~/.android/avd/<name>.avd/` (`config.ini`, `snapshots/avdslim_clean/`);
   guest `/data/local/tmp/avdslim_state.json`. No DB.
-- Verify: `make build`, `go vet ./...`, `gofmt -l .`; `go test ./...` (only
-  `internal/adb` has a test).
-  `avdslim doctor` / `on` / `off` need a live emulator.
+- Verify: `make build`, `go vet ./...`, `gofmt -l .`; `go test ./...`
+  (all gated in CI via `.github/workflows/ci.yml`).
+  `avdslim doctor` / `on` / `enable` / `off` need a live emulator.
 - Module path `github.com/kdbhalala/avdslim` must match the remote, or
   `go install` breaks.
 

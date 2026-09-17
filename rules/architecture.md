@@ -2,23 +2,23 @@
 
 `avdslim` is a zero-dependency (stdlib-only) Go CLI that cuts Android emulator
 host RAM (~8 GB → ~1.5 GB) by launching QEMU with `-lowram` + hardware GPU,
-disabling ~35 bloat packages via adb, and restoring a pre-baked `avdslim_clean`
+disabling ~50 bloat packages via adb, and restoring a pre-baked `avdslim_clean`
 snapshot for ~1.5 s boots.
 
 ## Layout
 
 - `cmd/avdslim/main.go` — only entrypoint. Hand-rolled arg parsing
-  (`os.Args` switch, no cobra/flag lib). All 15+ commands live here as
-  `handle*` functions (~1150 lines, the God-file).
+  (`os.Args` switch, no cobra/flag lib). All 16+ commands live here as
+  `handle*` functions (~1400 lines, the God-file).
 - `internal/adb/client.go` — adb subprocess wrapper (`Exec` = `CombinedOutput`).
   Owns guest-side mutations: `Slim` (`pm disable-user`), `Restore` (`pm enable`),
-  system settings, memory trim. Slim state persisted **on the device** at
-  `/data/local/tmp/avdslim_state.json`; `Restore` reads it, falls back to
-  re-enabling every known package when the file is absent.
+  `Enable` (selective feature/package re-enabling), system settings, memory trim.
+  Slim state persisted **on the device** at `/data/local/tmp/avdslim_state.json`;
+  `Restore` reads it, falls back to re-enabling every known package when absent.
 - `internal/bloat/packages.go` — source of truth for package lists:
   `StandardBloatCategories` (map, safe) + `AggressiveBloatPackages` (slice,
   incl. Play Store updater + Chrome). Never disable anything not listed here;
-  GMS core / WebView / sockets are protected by omission.
+  GMS core / WebView / sockets / photopicker are protected by omission.
 - `internal/config/` — host-side SDK/AVD knowledge. `paths.go` locates SDK
   (`ANDROID_HOME`/`ANDROID_SDK_ROOT` → OS-default paths), adb/emulator binaries
   (`LookPath` → SDK fallback → bare name), and per-OS GPU mode
@@ -55,9 +55,12 @@ stay independent of device state.
   `-snapshot avdslim_clean -no-snapshot-save` (golden) — never save over the
   golden snapshot during dev sessions; `stop --snap` is the only path that
   overwrites it.
-- `background_process_limit = 4` (not 2 — protects OAuth/biometrics);
-  animations restore to `1.0x` on `off`, never delete the keys except
-  `background_process_limit`.
+- `background_process_limit = 4` and `max_cached_processes = 4`
+  (eliminates cached app bloat while protecting OAuth/biometrics);
+  animations default to `1.0x` (stock fluid, turn off via `--no-anim`),
+  never delete keys on restore except `background_process_limit`.
+- `hw.cpu.ncore = 2` enforced in `TuneAvd` to curb host thread overhead and
+  ART compilation worker thread memory footprint.
 - `TuneAvd` rewrites `config.ini` from a map — key order is not preserved.
   Acceptable; do not "fix" by adding ordering unless a bug requires it.
 - Golden SDK rule the code enforces in `doctor`/`tuner`: Google APIs 4 KB

@@ -6,21 +6,21 @@
   injected via `-X main.version`; `VERSION=1.0.8` in `Makefile` — bump together
   with the `version` var in `cmd/avdslim/main.go` and `install.sh`).
 - `go vet ./...` — run before any PR; no lint config exists.
-- `go test ./...` / `make test` — one test: `internal/adb/client_test.go`
-  checks Slim/Restore are exact inverses against a fake bash `adb`
-  (skipped on Windows). Other packages have no tests.
+- `go test ./...` / `make test` — unit tests in `internal/adb/client_test.go`:
+  checks Slim/Restore exact inverse, target resolution, and selective feature/app
+  enabling (`TestEnableTarget`) against a fake bash `adb` (skipped on Windows).
 - `make cross` — CGO-free builds for darwin-arm64/amd64, linux-amd64,
   windows-amd64.
 - `gofmt -l .` — must be clean; no formatter config in repo.
 
 ## CI (`.github/workflows/`)
 
+- `ci.yml` — on push & pull_request to `main`: runs `gofmt` verification,
+  `go vet ./...`, `go test -v ./...`, and binary compilation.
 - `release.yml` — on tag `v*` only: builds 4 platform tarballs
   (`avdslim_<ver>_<os>_<arch>.tar.gz` + README/LICENSE), writes
   `checksums.txt`, publishes via `softprops/action-gh-release`. Go 1.22.
 - `github-repo-stats.yml` — monitoring workflow, unrelated to code quality.
-
-No CI runs tests, vet, or lint. Nothing gates `main`.
 
 ## Standard to hold
 

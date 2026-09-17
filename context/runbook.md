@@ -12,11 +12,12 @@ Android SDK (`ANDROID_HOME`/`ANDROID_SDK_ROOT` or OS-default path) with
 ```bash
 make build          # → bin/avdslim
 make install        # copies to ~/.local/bin or /usr/local/bin
-go test ./...       # only internal/adb has a test (Slim/Restore inverse)
-go vet ./...        # run manually; no CI gate
+go test ./...       # internal/adb tests (Slim/Restore inverse, enable, target resolution)
+go vet ./...        # verified locally and in CI (.github/workflows/ci.yml)
 ./bin/avdslim doctor        # env audit, safe read-only
 ./bin/avdslim list          # running emulators + installed AVDs
-./bin/avdslim on            # slim running emulator (add --aggressive/--keep=)
+./bin/avdslim on            # slim running emulator (add --aggressive/--keep=/--no-anim)
+./bin/avdslim enable        # re-enable specific feature/package (bluetooth, maps, etc.)
 ./bin/avdslim off           # restore stock services
 ```
 
