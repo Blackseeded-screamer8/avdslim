@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.8 — 2026-09-17
+
+### Added
+- **`avdslim enable` Command**: Selectively re-enable specific features (`bluetooth`, `animations`, `sync`, `location`, `bglimit`) or app packages (`maps`, `photos`, `chrome`, `camera`, `store`, etc.) on running AVDs without performing a full restore. Supports index, AVD name, serial, and `--all` multi-device targeting.
+- **Bluetooth Debloating & `--skip bluetooth`**: Added Bluetooth subsystem (`com.google.android.bluetooth`, `com.android.bluetoothmidiservice`, `bluetooth_on`) debloating, saving ~25 MB RAM. Added `--skip bluetooth` option for developers testing BLE peripherals.
+- **Privacy Sandbox Debloating**: Silenced `com.google.android.adservices.api` and `com.google.mainline.adservices` background attribution daemons.
+- **Continuous Integration (CI)**: Added GitHub Actions CI workflow to run formatting checks, `go vet`, tests, and binary compilation on push and pull requests.
+
+### Changed
+- **Animation Default Inverted**: Animations are now ON by default (Fluid 1.0x) for natural UI navigation. Added `--no-anim` / `--no-animations` flag to explicitly disable animations (0x) for instant UI response.
+- **Background Process Capping**: Configured `max_cached_processes=4` alongside `background_process_limit=4` to eliminate hidden cached app RAM bloat on Android 14–37.
+- **CPU Thread Tuning**: Set `hw.cpu.ncore=2` in `tune-avd` to curb host thread stack allocation and parallel compilation thread churn.
+- **PhotoPicker Protected**: Excluded `com.google.android.photopicker` by default to ensure modern `ActivityResultContracts.PickVisualMedia` dialogs remain functional.
+
 ## v1.0.7 — 2026-09-17
 
 ### Added
