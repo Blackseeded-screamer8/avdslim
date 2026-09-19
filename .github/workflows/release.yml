@@ -29,6 +29,13 @@ jobs:
           mkdir -p dist
           VERSION=${GITHUB_REF_NAME}
           
+          # Extract release notes from CHANGELOG.md
+          awk -v ver="${VERSION}" '
+            $0 ~ "^## "ver { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > dist/release_notes.md
+
           # Target platforms
           PLATFORMS=(
             "darwin/arm64"
@@ -66,4 +73,5 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/checksums.txt
+          body_path: dist/release_notes.md
           generate_release_notes: true
