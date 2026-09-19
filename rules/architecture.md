@@ -26,9 +26,10 @@ snapshot for ~1.5 s boots.
   `tuner.go` edits `~/.android/avd/<name>.avd/config.ini` (RAM/heap/GPU,
   no camera/audio), keeps a one-time `config.ini.bak`, and purges
   `hardware-qemu.ini{,.lock}` + `snapshots/` to kill stale 4 GB/lavapipe state.
-- `internal/host/process.go` (+ `process_unix.go` / `process_windows.go`) —
-  host QEMU PID discovery (`lsof -i :<port>` → `ps` fallback) and memory
-  probes (`footprint` on macOS → RSS fallback; `/proc/<pid>/status` on Linux).
+- `internal/host/` (`process.go`, `memory.go` + `process_unix.go` / `process_windows.go`) —
+  host QEMU PID discovery (`lsof -i :<port>` → `ps` fallback), host RAM/swap inspection
+  (`os.Getpagesize()`, `vm_stat`, `vm.swapusage`, `/proc/meminfo`), and memory
+  probes (`footprint --format bytes` on macOS → RSS fallback; `/proc/<pid>/status` on Linux).
   `SetDetached` is the only platform-split code (build tags).
 - `internal/shim/shim.go` — renames SDK `emulator` → `emulator.real`, writes a
   shell/batch shim injecting `-memory/-lowram/-no-audio/no-camera` + snapshot

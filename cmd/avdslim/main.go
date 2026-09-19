@@ -225,7 +225,11 @@ func handleList(client *adb.Client) {
 			}
 			fmt.Printf("  • %s (%s, Android %s, API %s)\n", emu.Serial, emu.Model, emu.AndroidVersion, emu.ApiLevel)
 			if hostFootprintMb > 0 {
-				fmt.Printf("    Host PID: %d | Activity Monitor: %d MB | RSS: %d MB | Status: %s\n", hostPid, hostFootprintMb, hostRssMb, statusStr)
+				if hostFootprintMb > hostRssMb && hostRssMb > 0 && hostFootprintMb-hostRssMb >= 100 {
+					fmt.Printf("    Host PID: %d | Activity Monitor: %d MB | RSS: %d MB (%d MB swapped) | Status: %s\n", hostPid, hostFootprintMb, hostRssMb, hostFootprintMb-hostRssMb, statusStr)
+				} else {
+					fmt.Printf("    Host PID: %d | Activity Monitor: %d MB | RSS: %d MB | Status: %s\n", hostPid, hostFootprintMb, hostRssMb, statusStr)
+				}
 			} else {
 				fmt.Printf("    Host PID: %d | Status: %s\n", hostPid, statusStr)
 			}
@@ -274,7 +278,11 @@ func handleMeasure(client *adb.Client, args []string) {
 		fmt.Println("🖥️  HOST (macOS) Footprint:")
 		fmt.Printf("   QEMU / Emulator PID: %d\n", hostPid)
 		fmt.Printf("   Activity Monitor Memory (Footprint): %d MB\n", footprint)
-		fmt.Printf("   Resident Physical RAM (RSS): %d MB\n\n", rss)
+		if footprint > rss && rss > 0 && footprint-rss >= 100 {
+			fmt.Printf("   Resident Physical RAM (RSS): %d MB (%d MB compressed or swapped out)\n\n", rss, footprint-rss)
+		} else {
+			fmt.Printf("   Resident Physical RAM (RSS): %d MB\n\n", rss)
+		}
 	}
 
 	out, _ := client.Exec("-s", serial, "shell", "dumpsys", "meminfo")

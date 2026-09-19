@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/kdbhalala/avdslim/internal/adb"
@@ -80,8 +81,43 @@ func RunDoctor(client *adb.Client) {
 		fmt.Println()
 	}
 
-	// 2. Installed AVD Configurations Audit
-	fmt.Println("💾 2. Installed AVD Configurations Audit:")
+	// 2. Host System Memory & Swap Pressure
+	fmt.Println("💻 2. Host System Memory & Swap Pressure:")
+	memInfo := host.GetHostMemoryInfo()
+	if memInfo.TotalMb > 0 {
+		pageDesc := fmt.Sprintf("%d KB", memInfo.PageSizeBytes/1024)
+		if memInfo.IsAppleSilicon {
+			pageDesc += " [Apple Silicon]"
+		} else if runtime.GOARCH == "amd64" {
+			pageDesc += " [x86_64]"
+		}
+		fmt.Printf("   • Total Host RAM: %s MB (Page Size: %s)\n", formatNumber(memInfo.TotalMb), pageDesc)
+		if memInfo.AvailableMb > 0 {
+			fmt.Printf("   • Available RAM: %s MB (Free: %s MB)\n", formatNumber(memInfo.AvailableMb), formatNumber(memInfo.FreeMb))
+		}
+		if memInfo.SwapTotalMb > 0 || memInfo.SwapUsedMb > 0 {
+			if memInfo.SwapUsedMb > 2048 {
+				fmt.Printf("   ⚠️  Swap Usage: %s MB used / %s MB total (High swap churn)\n", formatNumber(memInfo.SwapUsedMb), formatNumber(memInfo.SwapTotalMb))
+				fmt.Println("      -> Host is actively compressing/swapping anonymous memory.")
+				fmt.Println("      -> Note: `ps RSS` will read deceptively low; rely on Activity Monitor Footprint.")
+				issuesCount++
+			} else if memInfo.SwapUsedMb > 512 {
+				fmt.Printf("   ℹ️  Swap Usage: %s MB used / %s MB total (Moderate swap churn)\n", formatNumber(memInfo.SwapUsedMb), formatNumber(memInfo.SwapTotalMb))
+			} else {
+				fmt.Printf("   ✓ Swap Usage: %s MB used / %s MB total (Nominal)\n", formatNumber(memInfo.SwapUsedMb), formatNumber(memInfo.SwapTotalMb))
+			}
+		}
+		if memInfo.AvailableMb > 0 && memInfo.AvailableMb < 1024 {
+			fmt.Println("   ⚠️  Host memory is critically low (< 1 GB available). Emulator may lag or stutter.")
+			issuesCount++
+		}
+	} else {
+		fmt.Println("   ℹ️  Host memory details not available on this platform.")
+	}
+	fmt.Println()
+
+	// 3. Installed AVD Configurations Audit
+	fmt.Println("💾 3. Installed AVD Configurations Audit:")
 	avds := config.GetInstalledAvds()
 	if len(avds) == 0 {
 		fmt.Printf("   ℹ️  No AVDs found in %s\n\n", config.GetAvdBaseDir())
@@ -147,8 +183,8 @@ func RunDoctor(client *adb.Client) {
 		fmt.Println()
 	}
 
-	// 3. Running Emulators Diagnostic
-	fmt.Println("📱 3. Running Emulator Diagnostics:")
+	// 4. Running Emulators Diagnostic
+	fmt.Println("📱 4. Running Emulator Diagnostics:")
 	running, _ := client.GetRunningEmulators()
 	if len(running) == 0 {
 		fmt.Println("   ℹ️  No active emulators running right now.")
@@ -173,7 +209,11 @@ func RunDoctor(client *adb.Client) {
 			if hostPid > 0 {
 				fmt.Printf("     - Host PID: %d\n", hostPid)
 				fmt.Printf("     - Activity Monitor Footprint: %d MB\n", fp)
-				fmt.Printf("     - Physical RSS: %d MB\n", rss)
+				if fp > rss && rss > 0 && fp-rss >= 100 {
+					fmt.Printf("     - Physical RSS: %d MB (%d MB compressed/swapped out)\n", rss, fp-rss)
+				} else {
+					fmt.Printf("     - Physical RSS: %d MB\n", rss)
+				}
 			}
 
 			// Check guest root capability
@@ -195,8 +235,8 @@ func RunDoctor(client *adb.Client) {
 		fmt.Println()
 	}
 
-	// 4. Golden SDK Recommendation Banner
-	fmt.Println("💡 4. Golden SDK System Image Recommendation:")
+	// 5. Golden SDK Recommendation Banner
+	fmt.Println("💡 5. Golden SDK System Image Recommendation:")
 	fmt.Println("┌────────────────────────────────────────────────────────────────────────┐")
 	fmt.Println("│  When creating AVDs in Android Studio Device Manager:                  │")
 	fmt.Println("│                                                                        │")
@@ -225,4 +265,23 @@ func RunDoctor(client *adb.Client) {
 	}
 	fmt.Println("══════════════════════════════════════════════════════════════")
 	fmt.Println()
+}
+
+func formatNumber(n int) string {
+	s := strconv.Itoa(n)
+	if len(s) <= 3 {
+		return s
+	}
+	var res []byte
+	rem := len(s) % 3
+	if rem > 0 {
+		res = append(res, s[:rem]...)
+	}
+	for i := rem; i < len(s); i += 3 {
+		if len(res) > 0 {
+			res = append(res, ',')
+		}
+		res = append(res, s[i:i+3]...)
+	}
+	return string(res)
 }
