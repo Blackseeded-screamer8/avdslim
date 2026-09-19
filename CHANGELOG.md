@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.12 — 2026-09-19
+
+### Added
+- **Host System Memory & Swap Pressure Audit**: Added Section 2 to `avdslim doctor` checking host physical RAM and swap pressure. On Apple Silicon, uses `os.Getpagesize()` to dynamically account for 16 KB pages instead of assuming 4 KB (which undercounts free RAM 4x), and warns if macOS is heavily compressing or swapping anonymous memory.
+- **Compressed & Swapped Memory Indicator**: When physical RSS reads significantly lower than Activity Monitor memory footprint due to macOS page compression or swap, `doctor`, `measure`, and `status` now display the compressed/swapped delta directly (`(%d MB compressed/swapped out)`).
+
+### Fixed
+- **`footprint` Exact Bytes & Unit-Aware Parsing**: Hardened `GetHostFootprintMb` to request exact bytes via `footprint --format bytes` and parse `B`, `KB`, `MB`, and `GB` (including decimal representations like `1.8 GB`). Prevents formatting parse errors from silently falling back to `ps RSS` (which omits compressed/swapped pages).
+
 ## v1.0.11 — 2026-09-18
 
 ### Fixed
