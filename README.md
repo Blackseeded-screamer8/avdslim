@@ -227,6 +227,27 @@ avdslim enable maps Slim_Pixel_5         # by AVD name
 avdslim enable bluetooth --all           # across all running emulators
 ```
 
+**Host features** (audio, cameras, D-Pad, boot animation) live in the AVD's
+`config.ini`, not on the device, so they need no running emulator — and a cold
+boot to take effect:
+```bash
+avdslim enable audio                     # hw.audioInput/Output=yes, drops -no-audio
+avdslim enable camera Pixel_10_Pro       # emulated cameras + the guest camera apps
+avdslim enable dpad
+avdslim enable bootanim                  # drops -no-boot-anim
+
+avdslim disable audio                    # back to the slimmed default
+```
+`enable` writes an `avdslim.<feature>=yes` marker that `start`, `bake`,
+`tune-avd` and the Android Studio shim all honor, so the setting survives
+re-tuning. Apply it with `avdslim restart <avd>`; if the AVD has a Golden
+Snapshot, re-bake it (`avdslim bake <avd>`) since the snapshot carries the old
+hardware config. After upgrading avdslim, run `avdslim install-shim` again so
+Studio launches pick up the markers.
+
+📖 **Full list of every feature, alias and package you can enable or disable:
+[docs/FEATURES.md](docs/FEATURES.md).**
+
 ---
 
 ### 9. Slim an Active Emulator (`on`)

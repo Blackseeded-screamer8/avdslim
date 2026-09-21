@@ -116,15 +116,13 @@ func TuneAvd(targetAvd string, ramMb, heapMb int, gpuMode string) error {
 
 	kv["hw.ramSize"] = strconv.Itoa(ramMb)
 	kv["vm.heapSize"] = strconv.Itoa(heapMb)
-	kv["hw.camera.back"] = "none"
-	kv["hw.camera.front"] = "none"
-	kv["hw.audioInput"] = "no"
-	kv["hw.audioOutput"] = "no"
+	// Audio, cameras and the D-Pad go off here unless `avdslim enable <feature>`
+	// marked them on; ApplySlimHardware honors those markers.
+	ApplySlimHardware(kv)
 	kv["hw.gpu.mode"] = gpuMode
 	kv["hw.gpu.enabled"] = "yes"
 	kv["hw.keyboard"] = "yes"
 	kv["hw.cpu.ncore"] = "2"
-	kv["hw.dPad"] = "no"
 	kv["fastboot.forceColdBoot"] = "yes"
 	kv["fastboot.forceFastBoot"] = "no"
 
@@ -146,7 +144,8 @@ func TuneAvd(targetAvd string, ramMb, heapMb int, gpuMode string) error {
 	fmt.Printf("✅ Successfully tuned AVD %q!\n", avdName)
 	fmt.Printf("   • Host RAM allocated: %d MB (prevents host memory pressure)\n", ramMb)
 	fmt.Printf("   • VM Heap: %d MB\n", heapMb)
-	fmt.Println("   • Hardware Audio & Camera: disabled (saves host threads/buffers)")
+	fmt.Printf("   • Hardware Audio: %s | Cameras: %s (re-enable with `avdslim enable audio|camera`)\n",
+		onOff(kv["hw.audioOutput"] == "yes"), onOff(kv["hw.camera.back"] != "none"))
 	fmt.Printf("   • GPU Mode: %s (%s)\n", gpuMode, GetGpuBackendDescription(gpuMode))
 	fmt.Println("   • Runtime cache & snapshots: purged (prevents restoring stale 4GB/lavapipe states)")
 
@@ -163,6 +162,13 @@ func TuneAvd(targetAvd string, ramMb, heapMb int, gpuMode string) error {
 	fmt.Println()
 	fmt.Printf("ℹ️  Note: If this emulator is currently running, restart it to apply changes:\n   avdslim restart %s\n\n", avdName)
 	return nil
+}
+
+func onOff(on bool) string {
+	if on {
+		return "enabled"
+	}
+	return "disabled"
 }
 
 func HasGoldenSnapshot(avdName string) bool {

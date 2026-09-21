@@ -64,14 +64,19 @@ func IsShimOverwritten() bool {
 }
 
 // IsShimOutdated reports whether an installed shim predates the defaults file
-// (avdslim <= 1.0.5), so it ignores --ram from it until reinstalled.
+// (avdslim <= 1.0.5) or the avdslim.* feature markers (avdslim <= 1.0.12), so it
+// ignores --ram or `avdslim enable audio|camera` until reinstalled.
 func IsShimOutdated() bool {
 	emuPath, _, err := GetEmulatorBinaryPaths()
 	if err != nil || !hasShimHeader(emuPath) {
 		return false
 	}
 	data, err := os.ReadFile(emuPath) // our script, small
-	return err == nil && !strings.Contains(string(data), "DEFAULTS_FILE=")
+	if err != nil {
+		return false
+	}
+	script := string(data)
+	return !strings.Contains(script, "DEFAULTS_FILE=") || !strings.Contains(script, "avdslim_flag")
 }
 
 // hasShimHeader checks only the first bytes; the real emulator binary is large.
@@ -192,6 +197,14 @@ for arg in "$@"; do
     PREV="$arg"
 done
 
+# avdslim_flag reads an avdslim.* marker from the AVD's config.ini; "yes" means
+# the user re-enabled that feature with `+"`avdslim enable <feature>`"+`.
+CFG="$HOME/.android/avd/${AVD_NAME}.avd/config.ini"
+avdslim_flag() {
+    [ -n "$AVD_NAME" ] && [ -f "$CFG" ] || return 0
+    sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CFG" | tr -d ' \r' | tail -n 1
+}
+
 EXTRA=()
 if [ "$NO_SLIM" -ne 1 ]; then
     if [ "$HAS_MEM" -eq 0 ]; then
@@ -209,7 +222,12 @@ if [ "$NO_SLIM" -ne 1 ]; then
             EXTRA+=("-snapshot" "avdslim_clean" "-no-snapshot-save")
         fi
     fi
-    EXTRA+=("-no-audio" "-camera-back" "none" "-camera-front" "none")
+    if [ "$(avdslim_flag avdslim.audio)" != "yes" ]; then
+        EXTRA+=("-no-audio")
+    fi
+    if [ "$(avdslim_flag avdslim.camera)" != "yes" ]; then
+        EXTRA+=("-camera-back" "none" "-camera-front" "none")
+    fi
 fi
 
 exec "$REAL_EMU" "${EXTRA[@]}" "$@"

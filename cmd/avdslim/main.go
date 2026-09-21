@@ -52,6 +52,8 @@ func main() {
 		handleOn(client, subArgs)
 	case "enable":
 		handleEnable(client, subArgs)
+	case "disable":
+		handleDisable(client, subArgs)
 	case "off", "unslim", "restore", "reset":
 		handleOff(client, subArgs)
 	case "watch":
@@ -158,8 +160,11 @@ Commands:
                                 --no-anim (turn animations 0x for instant UI response)
                                 --skip=<groups> (leave alone: bluetooth,bglimit,sync,location,setup)
   restore, off         Instant 100%% stock restore (re-enables packages, animations & sync)
-  enable <target> [dev] Re-enable a feature (bluetooth, animations, sync, location) or package
-                       on a running AVD (Options: --all)
+  enable <target> [dev] Re-enable a feature or package
+                       Guest (running AVD): bluetooth, animations, sync, location, bglimit
+                       Host (config.ini):   audio, camera, dpad, bootanim — needs a restart
+                       Options: --all
+  disable <feature> [avd] Turn a host feature (audio, camera, dpad, bootanim) back off
   watch                Auto-detect & slim new emulators as soon as they boot
                        Options: --aggressive, --keep=<package>, --no-anim, --skip=<groups>
   tune-avd [avd_name]  Tune host AVD config.ini (RAM=1536M, Metal GPU, no cameras)
@@ -189,6 +194,8 @@ Examples:
   avdslim on --aggressive
   avdslim on --keep=com.google.android.apps.maps
   avdslim on --skip=animations,sync
+  avdslim enable audio Pixel_10_Pro
+  avdslim disable camera Pixel_10_Pro
   avdslim tune-avd Pixel_10_Pro --ram=1536
   avdslim restart
 
@@ -445,15 +452,27 @@ func handleEnable(client *adb.Client, args []string) {
 
 	if len(filtered) == 0 {
 		fmt.Println("❌ Please specify a feature or package to enable.")
-		fmt.Println("Usage: avdslim enable <feature|package> [device] [--all]")
-		fmt.Println("\nFeatures:    bluetooth, animations, sync, location, bglimit")
-		fmt.Println("App Aliases: maps, photos, chrome, camera, store, youtube, phone, contacts")
+		fmt.Println("Usage: avdslim enable <feature|package> [device|avd] [--all]")
+		fmt.Println("\nGuest features: bluetooth, animations, sync, location, bglimit")
+		fmt.Println("Host features:  " + strings.Join(config.HostFeatureNames(), ", ") + " (config.ini, needs a restart)")
+		fmt.Println("App Aliases:    maps, photos, chrome, camera, store, youtube, phone, contacts")
 		fmt.Println("\nExamples:")
 		fmt.Println("  avdslim enable bluetooth")
+		fmt.Println("  avdslim enable audio Pixel_10_Pro")
 		fmt.Println("  avdslim enable maps 1")
 		fmt.Println("  avdslim enable animations Slim_Pixel_5")
 		fmt.Println("  avdslim enable sync --all")
+		fmt.Println("\nFull list: https://github.com/kdbhalala/avdslim/blob/main/docs/FEATURES.md")
 		return
+	}
+
+	// Host features live in the AVD's config.ini, so they need no running emulator.
+	for i, a := range filtered {
+		if feature, ok := config.HostFeatureName(a); ok {
+			rest := append(append([]string{}, filtered[:i]...), filtered[i+1:]...)
+			handleHostFeature(client, feature, a, rest, true)
+			return
+		}
 	}
 
 	running, err := client.GetRunningEmulators()
@@ -508,6 +527,141 @@ func handleEnable(client *adb.Client, args []string) {
 		}
 		fmt.Printf("✅ Successfully enabled %s on %s!\n\n", target, serial)
 	}
+}
+
+// handleDisable turns a host feature back off. Guest-side packages and settings
+// are already covered by `avdslim on`, so this is host-only.
+func handleDisable(client *adb.Client, args []string) {
+	var filtered []string
+	for _, a := range args {
+		if !strings.HasPrefix(a, "--") {
+			filtered = append(filtered, a)
+		}
+	}
+
+	if len(filtered) == 0 {
+		fmt.Println("❌ Please specify a host feature to disable.")
+		fmt.Println("Usage: avdslim disable <feature> [avd]")
+		fmt.Println("\nHost features:")
+		for _, l := range config.HostFeatureDescriptions() {
+			fmt.Println("  " + l)
+		}
+		fmt.Println("\nGuest packages & settings are re-slimmed with: avdslim on")
+		fmt.Println("Full list: https://github.com/kdbhalala/avdslim/blob/main/docs/FEATURES.md")
+		return
+	}
+
+	feature, ok := config.HostFeatureName(filtered[0])
+	if !ok {
+		fmt.Printf("❌ Unknown host feature %q (valid: %s)\n", filtered[0], strings.Join(config.HostFeatureNames(), ", "))
+		return
+	}
+	handleHostFeature(client, feature, filtered[0], filtered[1:], false)
+}
+
+// handleHostFeature flips a config.ini host feature for one AVD, and for an
+// `enable` also re-enables the matching guest packages when that AVD is running.
+func handleHostFeature(client *adb.Client, feature, target string, rest []string, on bool) {
+	avdName, err := resolveAvdForFeature(client, rest)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		return
+	}
+
+	actions, err := config.SetHostFeature(avdName, feature, on)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		os.Exit(1)
+	}
+
+	verb := "Enabling"
+	if !on {
+		verb = "Disabling"
+	}
+	fmt.Printf("⚙️  %s host feature %q on %s:\n", verb, feature, avdName)
+	for _, a := range actions {
+		fmt.Printf("   ✓ config.ini %s\n", a)
+	}
+
+	// The guest packages (e.g. the camera apps) only matter when enabling.
+	if on {
+		if serial := runningSerialForAvd(client, avdName); serial != "" {
+			if guestActions, err := client.Enable(serial, target); err == nil {
+				for _, a := range guestActions {
+					fmt.Printf("   ✓ %s (%s)\n", a, serial)
+				}
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("ℹ️  QEMU reads these on a cold boot only. Apply with:")
+	fmt.Printf("   avdslim restart %s      # stops, purges snapshots, relaunches\n", avdName)
+	if config.HasGoldenSnapshot(avdName) {
+		fmt.Printf("   avdslim bake %s         # re-bake the Golden Snapshot with the new hardware\n", avdName)
+	}
+	fmt.Println()
+}
+
+// resolveAvdForFeature picks the AVD a host feature applies to: an explicit
+// name or index, else the only running emulator's AVD, else a prompt.
+func resolveAvdForFeature(client *adb.Client, args []string) (string, error) {
+	installed := config.GetInstalledAvds()
+
+	for _, a := range args {
+		if strings.HasPrefix(a, "--") {
+			continue
+		}
+		if idx, err := strconv.Atoi(a); err == nil {
+			if idx >= 1 && idx <= len(installed) {
+				return installed[idx-1]["name"], nil
+			}
+			// A bare number is also an emulator index; fall through to serials.
+		}
+		for _, avd := range installed {
+			if strings.EqualFold(avd["name"], a) {
+				return avd["name"], nil
+			}
+		}
+		if serial, err := client.ResolveDevice([]string{a}); err == nil {
+			if name := avdNameForSerial(client, serial); name != "" {
+				return name, nil
+			}
+		}
+		return "", fmt.Errorf("AVD %q not found in ~/.android/avd", a)
+	}
+
+	if running, err := client.GetRunningEmulators(); err == nil && len(running) == 1 {
+		if name := avdNameForSerial(client, running[0].Serial); name != "" {
+			fmt.Printf("ℹ️  Using the running emulator's AVD: %q\n\n", name)
+			return name, nil
+		}
+	}
+	return selectAvdInteractively(installed, "Select an AVD")
+}
+
+// avdNameForSerial asks a running emulator for its AVD name ("" when unknown).
+func avdNameForSerial(client *adb.Client, serial string) string {
+	out, _ := client.Exec("-s", serial, "emu", "avd", "name")
+	name := strings.TrimSpace(strings.Split(strings.TrimSpace(out), "\n")[0])
+	if name == "" || strings.Contains(name, "KO:") {
+		return ""
+	}
+	return name
+}
+
+// runningSerialForAvd returns the serial of the emulator running avdName, if any.
+func runningSerialForAvd(client *adb.Client, avdName string) string {
+	running, err := client.GetRunningEmulators()
+	if err != nil {
+		return ""
+	}
+	for _, r := range running {
+		if strings.EqualFold(avdNameForSerial(client, r.Serial), avdName) {
+			return r.Serial
+		}
+	}
+	return ""
 }
 
 func isDeviceSpecifier(client *adb.Client, running []adb.RunningEmulator, s string) bool {
@@ -686,12 +840,9 @@ func handleLaunch(client *adb.Client, args []string) {
 	emuArgs := []string{
 		"-avd", avdName,
 		"-memory", strconv.Itoa(ramMb),
-		"-no-audio",
-		"-camera-back", "none",
-		"-camera-front", "none",
 		"-gpu", gpuMode,
-		"-no-boot-anim",
 	}
+	emuArgs = append(emuArgs, hostFeatureArgs(avdName)...)
 
 	if lowRam {
 		emuArgs = append(emuArgs, "-lowram")
@@ -896,6 +1047,22 @@ func handleRestart(client *adb.Client, args []string) {
 		}
 	}
 	handleLaunch(client, launchArgs)
+}
+
+// hostFeatureArgs returns the slimming flags for the features avdName has NOT
+// re-enabled via `avdslim enable <feature>`.
+func hostFeatureArgs(avdName string) []string {
+	var args []string
+	if !config.HostFeatureOn(avdName, "audio") {
+		args = append(args, "-no-audio")
+	}
+	if !config.HostFeatureOn(avdName, "camera") {
+		args = append(args, "-camera-back", "none", "-camera-front", "none")
+	}
+	if !config.HostFeatureOn(avdName, "bootanim") {
+		args = append(args, "-no-boot-anim")
+	}
+	return args
 }
 
 // freeEmulatorPort returns the console port a new emulator should take, so boot
@@ -1193,13 +1360,10 @@ func handleBake(client *adb.Client, args []string) {
 		"-avd", targetAvd,
 		"-lowram",
 		"-memory", strconv.Itoa(ramMb),
-		"-no-audio",
-		"-camera-back", "none",
-		"-camera-front", "none",
 		"-gpu", gpuMode,
-		"-no-boot-anim",
 		"-no-snapshot-load",
 	}
+	emuArgs = append(emuArgs, hostFeatureArgs(targetAvd)...)
 	port := freeEmulatorPort(client)
 	targetSerial := "emulator-" + strconv.Itoa(port)
 	emuArgs = append(emuArgs, "-port", strconv.Itoa(port))

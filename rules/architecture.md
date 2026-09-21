@@ -26,6 +26,11 @@ snapshot for ~1.5 s boots.
   `tuner.go` edits `~/.android/avd/<name>.avd/config.ini` (RAM/heap/GPU,
   no camera/audio), keeps a one-time `config.ini.bak`, and purges
   `hardware-qemu.ini{,.lock}` + `snapshots/` to kill stale 4 GB/lavapipe state.
+  `features.go` owns host features (audio, camera, dpad, bootanim): it writes an
+  `avdslim.<feature>=yes|no` marker plus the matching `hw.*` keys into
+  `config.ini`. That marker is the single source of truth — `start`, `bake`,
+  `TuneAvd` (via `ApplySlimHardware`) and the shim all read it, so
+  `avdslim enable audio` survives a re-tune.
 - `internal/host/` (`process.go`, `memory.go` + `process_unix.go` / `process_windows.go`) —
   host QEMU PID discovery (`lsof -i :<port>` → `ps` fallback), host RAM/swap inspection
   (`os.Getpagesize()`, `vm_stat`, `vm.swapusage`, `/proc/meminfo`), and memory
@@ -33,7 +38,9 @@ snapshot for ~1.5 s boots.
   `SetDetached` is the only platform-split code (build tags).
 - `internal/shim/shim.go` — renames SDK `emulator` → `emulator.real`, writes a
   shell/batch shim injecting `-memory/-lowram/-no-audio/no-camera` + snapshot
-  restore. Honors caller's explicit `-memory/-lowram`, `--no-lowram`,
+  restore; `-no-audio`/`-camera-* none` are skipped when the AVD's `config.ini`
+  carries `avdslim.audio=yes` / `avdslim.camera=yes` (`avdslim_flag` in the
+  script — `IsShimOutdated` treats a shim without it as stale). Honors caller's explicit `-memory/-lowram`, `--no-lowram`,
   `--no-slim` passthroughs. Rollback on write failure.
 - `internal/doctor/doctor.go` — read-only audit (toolchain, AVD image type,
   RAM/GPU, running emulators, snapshot presence). Never mutates.

@@ -17,7 +17,12 @@ go vet ./...        # verified locally and in CI (.github/workflows/ci.yml)
 ./bin/avdslim doctor        # env audit, safe read-only
 ./bin/avdslim list          # running emulators + installed AVDs
 ./bin/avdslim on            # slim running emulator (add --aggressive/--keep=/--no-anim)
-./bin/avdslim enable        # re-enable specific feature/package (bluetooth, maps, etc.)
+./bin/avdslim enable        # re-enable a guest feature/package (bluetooth, maps, …)
+                            # or a host one (audio, camera, dpad, bootanim → config.ini,
+                            # needs a cold boot: avdslim restart / re-bake the snapshot)
+./bin/avdslim disable       # turn a host feature back off
+                            # every target is listed in docs/FEATURES.md
+                            # (tests in internal/{adb,config} fail if it drifts)
 ./bin/avdslim off           # restore stock services
 ```
 
