@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.13 — 2026-09-21
+
+### Added
+- **`avdslim enable <host-feature>` / `avdslim disable <host-feature>`**: audio, cameras, the D-Pad and the boot animation can be turned back on per AVD. `enable` writes an `avdslim.<feature>=yes` marker plus the matching `hw.*` keys into `config.ini`; `start`, `bake`, `tune-avd` and the Android Studio shim all read that marker, so the choice survives a re-tune and needs no shim reinstall per AVD. Host targets need no running emulator and default to the only running emulator's AVD; enabling `camera` also re-enables the guest camera apps when that AVD is up. Changes apply on the next cold boot (`avdslim restart`, and re-bake the Golden Snapshot if there is one).
+- **`docs/FEATURES.md`**: complete reference of every `enable`/`disable` target — host features, guest features and settings, all app aliases and the package fallbacks. Tests fail if it drifts from the code.
+
+### Changed
+- **`tune-avd` no longer re-mutes enabled hardware**: it applied `hw.audioInput/Output=no` and `hw.camera.*=none` unconditionally, undoing a manual config.ini edit on every run. It now honors the `avdslim.*` markers and reports the resulting audio/camera state.
+- **`IsShimOutdated` flags pre-marker shims** (avdslim ≤ 1.0.12), so `doctor` tells you to run `avdslim install-shim` before Android Studio launches can honor `enable audio` / `enable camera`.
+
 ## v1.0.12 — 2026-09-19
 
 ### Added
