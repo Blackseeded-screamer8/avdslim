@@ -60,6 +60,8 @@ func main() {
 		handleWatch(client, subArgs)
 	case "tune-avd", "tune":
 		handleTuneAvd(subArgs)
+	case "create", "new":
+		handleCreate(subArgs)
 	case "launch", "start", "run":
 		handleLaunch(client, subArgs)
 	case "stop", "kill", "quit":
@@ -89,7 +91,7 @@ func main() {
 
 // flagCommands are the commands whose flags the defaults file may set.
 var flagCommands = map[string]bool{
-	"on": true, "slim": true, "watch": true, "tune-avd": true, "tune": true,
+	"on": true, "slim": true, "watch": true, "tune-avd": true, "tune": true, "create": true, "new": true,
 	"launch": true, "start": true, "run": true, "bake": true,
 	"snapshot": true, "snap": true, "install-shim": true, "shim": true,
 }
@@ -169,6 +171,8 @@ Commands:
                        Options: --aggressive, --keep=<package>, --no-anim, --skip=<groups>
   tune-avd [avd_name]  Tune host AVD config.ini (RAM=1536M, Metal GPU, no cameras)
                        Options: --ram=<MB> (default: 1536), --heap=<MB> (default: 256)
+  create <name>        New AVD from the newest installed 'Google APIs' 4 KB image, pre-tuned
+                       Options: --api=<level>, --device=<id> (default: pixel_5), --ram=<MB>
   start, run, launch [avd] Launch AVD with low-memory host flags & auto-slim upon boot
                        Options: --no-slim, --no-lowram, --headless, --cold, --ram=<MB> (default: 1536)
   stop, kill [device]  Gracefully shut down emulator (Options: --snap, -f)
@@ -197,11 +201,12 @@ Examples:
   avdslim enable audio Pixel_10_Pro
   avdslim disable camera Pixel_10_Pro
   avdslim tune-avd Pixel_10_Pro --ram=1536
+  avdslim create Slim_Pixel --api=35
   avdslim restart
 
 Defaults:
   Put flags in %s to apply them to
-  on, watch, tune-avd, start, bake, snapshot and install-shim. Flags typed on
+  on, watch, tune-avd, create, start, bake, snapshot and install-shim. Flags typed on
   the command line win. Example file contents:
     --ram=2048 --skip=animations --keep=com.google.android.apps.maps
 `, version, config.DefaultsFilePath())
@@ -775,6 +780,97 @@ func handleTuneAvd(args []string) {
 	if err := config.TuneAvd(targetAvd, ramMb, heapMb, gpuMode); err != nil {
 		fmt.Printf("❌ %v\n", err)
 	}
+}
+
+// handleCreate makes a new AVD from an installed "Google APIs" 4 KB image via
+// avdmanager, then tunes it. It never installs SDK packages or accepts licenses.
+func handleCreate(args []string) {
+	name, device, api := "", "pixel_5", 0
+	ramMb, heapMb, gpuMode := 1536, 256, ""
+	for _, a := range args {
+		switch {
+		case strings.HasPrefix(a, "--api="):
+			v, err := strconv.Atoi(strings.TrimPrefix(a, "--api="))
+			if err != nil || v <= 0 {
+				fmt.Printf("❌ Invalid %s (expected a number, e.g. --api=35)\n", a)
+				os.Exit(1)
+			}
+			api = v
+		case strings.HasPrefix(a, "--device="):
+			device = strings.TrimPrefix(a, "--device=")
+		case strings.HasPrefix(a, "--ram="):
+			if v, err := strconv.Atoi(strings.TrimPrefix(a, "--ram=")); err == nil {
+				ramMb = v
+			}
+		case strings.HasPrefix(a, "--heap="):
+			if v, err := strconv.Atoi(strings.TrimPrefix(a, "--heap=")); err == nil {
+				heapMb = v
+			}
+		case strings.HasPrefix(a, "--gpu="):
+			gpuMode = strings.TrimPrefix(a, "--gpu=")
+		case !strings.HasPrefix(a, "--") && name == "":
+			name = a
+		}
+	}
+
+	if !validAvdName(name) {
+		fmt.Println("❌ Please give the new AVD a name (letters, digits, '.', '_' or '-').")
+		fmt.Println("Usage: avdslim create <name> [--api=<level>] [--device=pixel_5] [--ram=<MB>]")
+		os.Exit(1)
+	}
+	for _, avd := range config.GetInstalledAvds() {
+		if strings.EqualFold(avd["name"], name) {
+			fmt.Printf("❌ AVD %q already exists. Tune it instead: avdslim tune-avd %s\n", avd["name"], avd["name"])
+			os.Exit(1)
+		}
+	}
+
+	images := config.SlimImages(config.GetAndroidSdkDir(), api)
+	if len(images) == 0 {
+		level := "35"
+		if api > 0 {
+			level = strconv.Itoa(api)
+		}
+		fmt.Printf("❌ No 'Google APIs' (4 KB) %s system image installed.\n", config.HostAbi())
+		fmt.Println("   Install one (you will be asked to accept Google's license):")
+		fmt.Printf("   sdkmanager \"system-images;android-%s;google_apis;%s\"\n", level, config.HostAbi())
+		os.Exit(1)
+	}
+	avdmanager := config.FindAvdmanager()
+	if avdmanager == "" {
+		fmt.Println("❌ avdmanager not found. Install the SDK Command-line Tools")
+		fmt.Println("   (Android Studio → SDK Manager → SDK Tools), or put avdmanager on PATH.")
+		os.Exit(1)
+	}
+
+	fmt.Printf("📦 Creating AVD %q from %s (device: %s)...\n", name, images[0], device)
+	cmd := exec.Command(avdmanager, "create", "avd", "-n", name, "-k", images[0], "-d", device)
+	cmd.Stdin = strings.NewReader("no\n") // decline the custom hardware profile prompt
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("❌ avdmanager failed: %v (it needs Java 17+; check --device with `avdmanager list device`)\n", err)
+		os.Exit(1)
+	}
+	fmt.Println()
+
+	if err := config.TuneAvd(name, ramMb, heapMb, gpuMode); err != nil {
+		fmt.Printf("❌ Created %q but tuning failed: %v\n   Retry: avdslim tune-avd %s\n", name, err, name)
+		os.Exit(1)
+	}
+	fmt.Printf("Next: avdslim start %s   then   avdslim bake %s   (~1.5 s boots)\n\n", name, name)
+}
+
+// validAvdName mirrors avdmanager's allowed AVD name characters.
+func validAvdName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func handleLaunch(client *adb.Client, args []string) {

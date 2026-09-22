@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **`avdslim create <name>`**: creates a new AVD from the newest installed "Google APIs" 4 KB image for the host CPU (Play Store and 16 KB page-size images are never picked), via `avdmanager`, then tunes it like `tune-avd`. Options: `--api=<level>`, `--device=<id>` (default `pixel_5`), `--ram`/`--heap`/`--gpu`. Refuses to overwrite an existing AVD. It never installs images or accepts licenses; with no suitable image it prints the `sdkmanager` command to run. Finds `avdmanager` on PATH or in the SDK's `cmdline-tools/latest` or versioned (`cmdline-tools/23.0`) directory.
+- **End-to-end CLI tests without an emulator**: `cmd/avdslim/main_test.go` runs the real `main()` against a fake `adb` (`internal/adbtest`) and a fake `avdmanager`, covering `on`/`off`/`list`/`enable`/`doctor`/`create`.
+
 ## v1.0.13 — 2026-09-21
 
 ### Added

@@ -280,7 +280,7 @@ avdslim on --skip=sync,location
 | `setup` | `user_setup_complete`, `device_provisioned` (otherwise marked done) |
 
 #### Your own defaults
-Put flags you always want in a defaults file. They apply to `on`, `watch`, `tune-avd`, `start`, `bake`, `snapshot` and `install-shim`; flags typed on the command line win. Lines starting with `#` are comments.
+Put flags you always want in a defaults file. They apply to `on`, `watch`, `tune-avd`, `create`, `start`, `bake`, `snapshot` and `install-shim`; flags typed on the command line win. Lines starting with `#` are comments.
 
 * macOS: `~/Library/Application Support/avdslim/defaults`
 * Linux: `~/.config/avdslim/defaults`
@@ -323,6 +323,20 @@ avdslim tune-avd Pixel_10_Pro --ram=1536 --heap=256
 * Sets `hw.gpu.mode = host` (Apple Silicon Metal hardware acceleration)
 * Disables camera and audio emulation threads
 * Purges stale `hardware-qemu.ini` and snapshots
+
+### Create a Slim AVD (`create`)
+Makes a new AVD that passes `doctor` from the start, with no Android Studio clicking:
+```bash
+avdslim create Slim_Pixel              # newest installed Google APIs image
+avdslim create Slim_Pixel --api=35 --device=pixel_6 --ram=2048
+```
+* Picks the newest installed **Google APIs 4 KB** image for your CPU (`arm64-v8a` or
+  `x86_64`); Play Store and 16 KB page-size images are never used
+* Runs `avdmanager create avd`, then applies `tune-avd` (backup kept as `config.ini.bak`)
+* Refuses to overwrite an existing AVD
+* Never downloads images or accepts licenses for you. If no suitable image is
+  installed it prints the `sdkmanager` command to run.
+* Needs the SDK Command-line Tools (`avdmanager`) and Java 17+
 
 ---
 

@@ -31,6 +31,11 @@ snapshot for ~1.5 s boots.
   `config.ini`. That marker is the single source of truth — `start`, `bake`,
   `TuneAvd` (via `ApplySlimHardware`) and the shim all read it, so
   `avdslim enable audio` survives a re-tune.
+  `create.go` picks images for `avdslim create`: only
+  `system-images/android-<N>/google_apis/<host abi>` (never Play Store or
+  `_ps16k`), newest first, and locates `avdmanager` (PATH →
+  `cmdline-tools/latest` → highest versioned dir). `create` never runs
+  `sdkmanager` or accepts licenses; it shells out to `avdmanager` then `TuneAvd`.
 - `internal/host/` (`process.go`, `memory.go` + `process_unix.go` / `process_windows.go`) —
   host QEMU PID discovery (`lsof -i :<port>` → `ps` fallback), host RAM/swap inspection
   (`os.Getpagesize()`, `vm_stat`, `vm.swapusage`, `/proc/meminfo`), and memory
@@ -44,6 +49,8 @@ snapshot for ~1.5 s boots.
   `--no-slim` passthroughs. Rollback on write failure.
 - `internal/doctor/doctor.go` — read-only audit (toolchain, AVD image type,
   RAM/GPU, running emulators, snapshot presence). Never mutates.
+- `internal/adbtest/adbtest.go` — fake bash `adb` for tests; imported only by
+  `_test.go` files, never by shipped code. A leaf (stdlib only).
 
 ## Dependency direction
 
