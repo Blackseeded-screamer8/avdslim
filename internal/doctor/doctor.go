@@ -56,7 +56,7 @@ func RunDoctor(client *adb.Client) {
 
 	shimActive, _ := shim.IsShimInstalled()
 	if shimActive && shim.IsShimOutdated() {
-		fmt.Println("   ⚠️  Android Studio Shim: Outdated, ignores your defaults file (run `avdslim install-shim` to update)")
+		fmt.Println("   ⚠️  Android Studio Shim: Outdated, misses newer settings (run `avdslim install-shim` to update)")
 	} else if shimActive {
 		fmt.Println("   ✓ Android Studio Shim: Active (GUI launches are automatically slimmed)")
 	} else if shim.IsShimOverwritten() {

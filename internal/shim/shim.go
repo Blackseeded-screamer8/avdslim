@@ -65,7 +65,8 @@ func IsShimOverwritten() bool {
 
 // IsShimOutdated reports whether an installed shim predates the defaults file
 // (avdslim <= 1.0.5) or the avdslim.* feature markers (avdslim <= 1.0.12), so it
-// ignores --ram or `avdslim enable audio|camera` until reinstalled.
+// ignores --ram or `avdslim enable audio|camera` until reinstalled. With
+// ANDROID_AVD_HOME set, shims from <= 1.0.13 also look for AVDs in the wrong place.
 func IsShimOutdated() bool {
 	emuPath, _, err := GetEmulatorBinaryPaths()
 	if err != nil || !hasShimHeader(emuPath) {
@@ -76,7 +77,8 @@ func IsShimOutdated() bool {
 		return false
 	}
 	script := string(data)
-	return !strings.Contains(script, "DEFAULTS_FILE=") || !strings.Contains(script, "avdslim_flag")
+	return !strings.Contains(script, "DEFAULTS_FILE=") || !strings.Contains(script, "avdslim_flag") ||
+		(os.Getenv("ANDROID_AVD_HOME") != "" && !strings.Contains(script, "ANDROID_AVD_HOME"))
 }
 
 // hasShimHeader checks only the first bytes; the real emulator binary is large.
@@ -147,10 +149,14 @@ func UninstallShim() error {
 		return fmt.Errorf("shim is not installed (original %s not found)", realPath)
 	}
 
-	// Remove shim file
-	_ = os.Remove(emuPath)
+	// An SDK update replaced the shim: emulator is already the new stock
+	// binary and emulator.real is the old one. Swapping would downgrade.
+	if IsShimOverwritten() {
+		return fmt.Errorf("an emulator update already replaced the shim, so %s is stock and newer than %s; "+
+			"nothing to restore. %s is a leftover copy of the old emulator you can delete", emuPath, realPath, realPath)
+	}
 
-	// Restore original binary
+	// Rename over the shim in one step, so a failure never leaves no emulator.
 	if err := os.Rename(realPath, emuPath); err != nil {
 		return fmt.Errorf("failed to restore original emulator: %w", err)
 	}
@@ -199,7 +205,8 @@ done
 
 # avdslim_flag reads an avdslim.* marker from the AVD's config.ini; "yes" means
 # the user re-enabled that feature with `+"`avdslim enable <feature>`"+`.
-CFG="$HOME/.android/avd/${AVD_NAME}.avd/config.ini"
+AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+CFG="$AVD_HOME/${AVD_NAME}.avd/config.ini"
 avdslim_flag() {
     [ -n "$AVD_NAME" ] && [ -f "$CFG" ] || return 0
     sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CFG" | tr -d ' \r' | tail -n 1
@@ -217,7 +224,7 @@ if [ "$NO_SLIM" -ne 1 ]; then
         EXTRA+=("-no-window")
     fi
     if [ "$HAS_SNAP" -eq 0 ] && [ -n "$AVD_NAME" ]; then
-        SNAP_DIR="$HOME/.android/avd/${AVD_NAME}.avd/snapshots/avdslim_clean"
+        SNAP_DIR="$AVD_HOME/${AVD_NAME}.avd/snapshots/avdslim_clean"
         if [ -d "$SNAP_DIR" ]; then
             EXTRA+=("-snapshot" "avdslim_clean" "-no-snapshot-save")
         fi

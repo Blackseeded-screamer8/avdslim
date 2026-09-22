@@ -1381,7 +1381,7 @@ func handleUninstallShim() {
 	fmt.Println("🔄 Restoring original Android SDK emulator binary...")
 	if err := shim.UninstallShim(); err != nil {
 		fmt.Printf("❌ %v\n", err)
-		return
+		os.Exit(1)
 	}
 	fmt.Println("✅ Successfully uninstalled shim. Stock emulator binary restored.")
 	fmt.Println()
