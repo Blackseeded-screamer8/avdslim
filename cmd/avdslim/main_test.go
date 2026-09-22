@@ -155,6 +155,40 @@ func TestOnRejectsUnknownSkip(t *testing.T) {
 	}
 }
 
+func TestOnFailsWithoutStateRecord(t *testing.T) {
+	d := newDevice(t, true)
+	d.write("readonly", "")
+	out, ok := d.run("on")
+	if ok {
+		t.Fatalf("on succeeded without a state record:\n%s", out)
+	}
+	mustContain(t, out, "nothing was changed")
+	if strings.Contains(d.read("calls"), "disable-user") {
+		t.Error("packages disabled without a state record")
+	}
+}
+
+func TestOffPartialFailureIsRetryable(t *testing.T) {
+	d := newDevice(t, true)
+	if out, ok := d.run("on"); !ok {
+		t.Fatalf("on failed:\n%s", out)
+	}
+	d.write("enable_fails", "com.google.android.youtube\n")
+	out, ok := d.run("off")
+	if ok {
+		t.Fatalf("off reported success with a package still disabled:\n%s", out)
+	}
+	mustContain(t, out, "still disabled: com.google.android.youtube")
+
+	os.Remove(filepath.Join(d.dir, "enable_fails"))
+	if out, ok := d.run("off"); !ok {
+		t.Fatalf("retry failed:\n%s", out)
+	}
+	if d.read("state") != "" {
+		t.Error("state file kept after a full restore")
+	}
+}
+
 func TestNoEmulator(t *testing.T) {
 	d := newDevice(t, false)
 	for _, cmd := range []string{"on", "off", "measure"} {

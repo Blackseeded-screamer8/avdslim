@@ -1,9 +1,11 @@
 package adb
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/kdbhalala/avdslim/internal/adbtest"
@@ -65,6 +67,132 @@ func TestSlimRestoreIsExactInverse(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "state")); err == nil {
 		t.Error("state file not removed")
 	}
+}
+
+func write(t *testing.T, dir, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readState(t *testing.T, dir string) SlimState {
+	t.Helper()
+	var s SlimState
+	b, err := os.ReadFile(filepath.Join(dir, "state"))
+	if err != nil {
+		return s
+	}
+	if err := json.Unmarshal(b, &s); err != nil {
+		t.Fatalf("bad state JSON %q: %v", b, err)
+	}
+	return s
+}
+
+// A second, narrower slim must not forget what the first one disabled, or
+// `off` would leave those packages disabled for good.
+func TestReslimKeepsEarlierDisables(t *testing.T) {
+	c, dir := newFake(t)
+	write(t, dir, "packages", "com.android.vending\ncom.google.android.apps.maps\n")
+
+	if _, err := c.Slim("e", true, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Slim("e", false, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if s := readState(t, dir); !contains(s.DisabledPackages, "com.android.vending") {
+		t.Fatalf("aggressive-only package dropped from state: %v", s.DisabledPackages)
+	}
+
+	if _, err := c.Restore("e"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(read(t, dir, "calls"), "pm enable com.android.vending") {
+		t.Error("off did not re-enable the package the first slim disabled")
+	}
+}
+
+// --keep on a re-slim re-enables a package an earlier slim disabled, and it
+// stays recorded until that succeeds.
+func TestReslimKeepReenables(t *testing.T) {
+	c, dir := newFake(t)
+	write(t, dir, "packages", "com.google.android.apps.maps\ncom.google.android.youtube\n")
+
+	c.Slim("e", false, nil, nil)
+	os.Remove(filepath.Join(dir, "calls"))
+	if _, err := c.Slim("e", false, []string{"com.google.android.apps.maps"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	calls := read(t, dir, "calls")
+	if !strings.Contains(calls, "pm enable com.google.android.apps.maps") {
+		t.Error("kept package not re-enabled")
+	}
+	if strings.Contains(calls, "disable-user --user 0 com.google.android.apps.maps") {
+		t.Error("kept package disabled")
+	}
+	s := readState(t, dir)
+	if contains(s.DisabledPackages, "com.google.android.apps.maps") || !contains(s.DisabledPackages, "com.google.android.youtube") {
+		t.Errorf("state = %v, want youtube only", s.DisabledPackages)
+	}
+}
+
+// If the state file cannot be written, Slim must change nothing: without the
+// record, `off` cannot undo it.
+func TestSlimAbortsWhenStateUnwritable(t *testing.T) {
+	c, dir := newFake(t)
+	write(t, dir, "packages", "com.google.android.apps.maps\n")
+	write(t, dir, "readonly", "")
+
+	if _, err := c.Slim("e", false, nil, nil); err == nil {
+		t.Fatal("expected an error")
+	}
+	calls := read(t, dir, "calls")
+	for _, mutation := range []string{"disable-user", "settings put", "bluetooth_manager"} {
+		if strings.Contains(calls, mutation) {
+			t.Errorf("mutated the guest (%s) without a state record", mutation)
+		}
+	}
+}
+
+func TestSlimFailsWhenPackagesUnlisted(t *testing.T) {
+	c, dir := newFake(t)
+	write(t, dir, "pm_broken", "")
+	if _, err := c.Slim("e", false, nil, nil); err == nil {
+		t.Fatal("expected an error when pm list packages fails")
+	}
+	if strings.Contains(read(t, dir, "calls"), "settings put") {
+		t.Error("changed settings after pm failed")
+	}
+}
+
+// A failed re-enable must stay in the state file so `off` can be retried.
+func TestRestoreKeepsStateOnFailure(t *testing.T) {
+	c, dir := newFake(t)
+	write(t, dir, "packages", "com.google.android.apps.maps\ncom.google.android.youtube\n")
+	c.Slim("e", false, nil, nil)
+
+	write(t, dir, "enable_fails", "com.google.android.youtube\n")
+	if _, err := c.Restore("e"); err == nil {
+		t.Fatal("expected an error when a package cannot be re-enabled")
+	}
+	if s := readState(t, dir); len(s.DisabledPackages) != 1 || s.DisabledPackages[0] != "com.google.android.youtube" {
+		t.Fatalf("state after partial restore = %v, want [youtube]", s.DisabledPackages)
+	}
+
+	os.Remove(filepath.Join(dir, "enable_fails"))
+	if _, err := c.Restore("e"); err != nil {
+		t.Fatalf("retry failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "state")); err == nil {
+		t.Error("state file kept after a full restore")
+	}
+}
+
+func read(t *testing.T, dir, name string) string {
+	t.Helper()
+	b, _ := os.ReadFile(filepath.Join(dir, name))
+	return string(b)
 }
 
 func TestResolveDevice(t *testing.T) {

@@ -350,7 +350,11 @@ func handleOn(client *adb.Client, args []string) {
 	}
 
 	fmt.Println("1. Disabling non-essential background daemons:")
-	count, _ := client.Slim(serial, aggressive, keepPackages, skip)
+	count, err := client.Slim(serial, aggressive, keepPackages, skip)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Printf("   -> Successfully disabled %d packages.\n\n", count)
 
 	if skip["animations"] {
@@ -405,8 +409,12 @@ func handleOff(client *adb.Client, args []string) {
 
 	fmt.Printf("🔄 Restoring default services for %s...\n\n", serial)
 	fmt.Println("1. Re-enabling packages:")
-	count, _ := client.Restore(serial)
+	count, err := client.Restore(serial)
 	fmt.Printf("   -> Restored %d packages.\n\n", count)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Println("2. Restored the system settings avdslim changed to their previous values.")
 	fmt.Printf("✅ Successfully restored %s to stock configuration.\n\n", serial)
 }
@@ -1265,9 +1273,14 @@ func handleWatch(client *adb.Client, args []string) {
 
 				fmt.Printf("\n✨ [%s] Emulator booted! Automatically applying avdslim...\n", emu.Serial)
 				warnIfShimOverwritten()
-				count, _ := client.Slim(emu.Serial, aggressive, keepPackages, skip)
-				fmt.Printf("✓ [%s] Successfully slimmed! Disabled %d packages, trimmed RAM.\n\n", emu.Serial, count)
+				// Marked either way: a failure here is not transient once boot has completed.
 				slimmedDevices[emu.Serial] = true
+				count, err := client.Slim(emu.Serial, aggressive, keepPackages, skip)
+				if err != nil {
+					fmt.Printf("❌ [%s] Not slimmed: %v\n\n", emu.Serial, err)
+					continue
+				}
+				fmt.Printf("✓ [%s] Successfully slimmed! Disabled %d packages, trimmed RAM.\n\n", emu.Serial, count)
 			}
 		}
 	}
@@ -1629,7 +1642,11 @@ func handleSnapshot(client *adb.Client, args []string) {
 	fmt.Printf("📸 Capturing Golden Snapshot from live emulator %s (%s)...\n", serial, avdName)
 	if !skipSlim {
 		fmt.Println("⚡ Trimming background daemons and caches while preserving installed apps...")
-		count, _ := client.Slim(serial, aggressive, keepPackages, skip)
+		count, err := client.Slim(serial, aggressive, keepPackages, skip)
+		if err != nil {
+			fmt.Printf("❌ %v\n   Snapshot not saved. Retry, or pass --skip-slim to capture as-is.\n", err)
+			os.Exit(1)
+		}
 		fmt.Printf("✓ Trimmed memory and disabled %d background bloat packages.\n", count)
 	}
 
