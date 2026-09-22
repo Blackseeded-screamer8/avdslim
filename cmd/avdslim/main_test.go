@@ -232,11 +232,18 @@ func TestOffPartialFailureIsRetryable(t *testing.T) {
 
 func TestNoEmulator(t *testing.T) {
 	d := newDevice(t, false)
-	for _, cmd := range []string{"on", "off", "measure"} {
-		out, _ := d.run(cmd)
-		mustContain(t, out, "no running Android emulator")
+	// Scripts and CI rely on a non-zero exit when nothing was done.
+	for _, cmd := range []string{"on", "off", "measure", "snapshot"} {
+		out, ok := d.run(cmd)
+		if ok {
+			t.Errorf("%s exited 0 with no emulator", cmd)
+		}
+		mustContain(t, strings.ToLower(out), "no running android emulator")
 	}
-	out, _ := d.run("enable", "maps")
+	out, ok := d.run("enable", "maps")
+	if ok {
+		t.Error("enable exited 0 with no emulator")
+	}
 	mustContain(t, out, "No running Android emulators")
 }
 

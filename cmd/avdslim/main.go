@@ -278,7 +278,7 @@ func handleMeasure(client *adb.Client, args []string) {
 	serial, err := client.ResolveDevice(args)
 	if err != nil {
 		fmt.Printf("❌ %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	fmt.Printf("📊 Measuring memory footprint for %s...\n\n", serial)
@@ -328,7 +328,7 @@ func handleOn(client *adb.Client, args []string) {
 	serial, err := client.ResolveDevice(filteredArgs)
 	if err != nil {
 		fmt.Printf("❌ %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	presetName := "Standard"
@@ -404,7 +404,7 @@ func handleOff(client *adb.Client, args []string) {
 	serial, err := client.ResolveDevice(args)
 	if err != nil {
 		fmt.Printf("❌ %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	fmt.Printf("🔄 Restoring default services for %s...\n\n", serial)
@@ -428,7 +428,7 @@ func handleRepair(client *adb.Client, args []string) {
 	serial, err := client.ResolveDevice(args)
 	if err != nil {
 		fmt.Printf("❌ %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	fmt.Printf("🩺 Repairing %s...\n", serial)
@@ -496,7 +496,7 @@ func handleEnable(client *adb.Client, args []string) {
 	running, err := client.GetRunningEmulators()
 	if err != nil || len(running) == 0 {
 		fmt.Println("❌ No running Android emulators detected via adb.")
-		return
+		os.Exit(1)
 	}
 
 	var target, deviceArg string
@@ -521,22 +521,24 @@ func handleEnable(client *adb.Client, args []string) {
 		serial, err := client.ResolveDevice([]string{deviceArg})
 		if err != nil {
 			fmt.Printf("❌ %v\n", err)
-			return
+			os.Exit(1)
 		}
 		devicesToEnable = []string{serial}
 	} else {
 		serial, err := client.ResolveDevice(nil)
 		if err != nil {
 			fmt.Printf("❌ %v\n", err)
-			return
+			os.Exit(1)
 		}
 		devicesToEnable = []string{serial}
 	}
 
+	failed := false
 	for _, serial := range devicesToEnable {
 		actions, err := client.Enable(serial, target)
 		if err != nil {
 			fmt.Printf("❌ [%s] %v\n", serial, err)
+			failed = true
 			continue
 		}
 		fmt.Printf("⚡ Re-enabling %q on %s:\n", target, serial)
@@ -544,6 +546,9 @@ func handleEnable(client *adb.Client, args []string) {
 			fmt.Printf("   ✓ %s\n", act)
 		}
 		fmt.Printf("✅ Successfully enabled %s on %s!\n\n", target, serial)
+	}
+	if failed {
+		os.Exit(1)
 	}
 }
 
@@ -572,7 +577,7 @@ func handleDisable(client *adb.Client, args []string) {
 	feature, ok := config.HostFeatureName(filtered[0])
 	if !ok {
 		fmt.Printf("❌ Unknown host feature %q (valid: %s)\n", filtered[0], strings.Join(config.HostFeatureNames(), ", "))
-		return
+		os.Exit(1)
 	}
 	handleHostFeature(client, feature, filtered[0], filtered[1:], false)
 }
@@ -583,7 +588,7 @@ func handleHostFeature(client *adb.Client, feature, target string, rest []string
 	avdName, err := resolveAvdForFeature(client, rest)
 	if err != nil {
 		fmt.Printf("❌ %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	actions, err := config.SetHostFeature(avdName, feature, on)
@@ -786,12 +791,13 @@ func handleTuneAvd(args []string) {
 		targetAvd, err = selectAvdInteractively(installed, "Select an AVD to tune")
 		if err != nil {
 			fmt.Printf("❌ %v\n", err)
-			return
+			os.Exit(1)
 		}
 	}
 
 	if err := config.TuneAvd(targetAvd, ramMb, heapMb, gpuMode); err != nil {
 		fmt.Printf("❌ %v\n", err)
+		os.Exit(1)
 	}
 }
 
@@ -910,7 +916,7 @@ func handleLaunch(client *adb.Client, args []string) {
 		avdName, err = selectAvdInteractively(installed, "Select an AVD to launch")
 		if err != nil {
 			fmt.Printf("❌ %v\n", err)
-			return
+			os.Exit(1)
 		}
 	}
 
@@ -1116,7 +1122,7 @@ func handleStop(client *adb.Client, args []string) {
 		s, err := client.ResolveDevice([]string{target})
 		if err != nil {
 			fmt.Printf("❌ %v\n", err)
-			return
+			os.Exit(1)
 		}
 		serial = s
 	} else if len(running) == 1 {
@@ -1139,7 +1145,7 @@ func handleStop(client *adb.Client, args []string) {
 			serial = running[idx-1].Serial
 		} else {
 			fmt.Println("❌ Invalid selection.")
-			return
+			os.Exit(1)
 		}
 	}
 
@@ -1179,7 +1185,7 @@ func handleRestart(client *adb.Client, args []string) {
 	serial, err := client.ResolveDevice(args)
 	if err != nil {
 		fmt.Printf("❌ %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	avdNameOut, _ := client.Exec("-s", serial, "emu", "avd", "name")
@@ -1196,7 +1202,7 @@ func handleRestart(client *adb.Client, args []string) {
 	}
 	if avdName == "" {
 		fmt.Println("❌ Could not determine AVD name for running emulator.")
-		return
+		os.Exit(1)
 	}
 
 	fmt.Printf("🔄 Gracefully shutting down %s (%s)...\n", serial, avdName)
@@ -1367,7 +1373,7 @@ func handleBench(client *adb.Client, args []string) {
 	serial, err := client.ResolveDevice(args)
 	if err != nil {
 		fmt.Printf("❌ %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	hostPid := host.FindHostPidForSerial(serial)
@@ -1436,7 +1442,7 @@ func handleInstallShim(args []string) {
 	fmt.Printf("🔧 Installing AVD-SLIM emulator shim (Default RAM: %dMB)...\n", ramMb)
 	if err := shim.InstallShim(ramMb); err != nil {
 		fmt.Printf("❌ Failed to install shim: %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	fmt.Println("✅ Successfully installed emulator shim!")
@@ -1510,11 +1516,11 @@ func handleBake(client *adb.Client, args []string) {
 		targetAvd, err = selectAvdInteractively(installed, "Select an AVD to bake Golden Snapshot for")
 		if err != nil {
 			fmt.Printf("❌ %v\n", err)
-			return
+			os.Exit(1)
 		}
 	} else {
 		fmt.Println("❌ No installed AVDs found.")
-		return
+		os.Exit(1)
 	}
 
 	fmt.Printf("🍳 Baking Golden Snapshot for %q (RAM: %d MB)...\n", targetAvd, ramMb)
@@ -1684,21 +1690,19 @@ func handleSnapshot(client *adb.Client, args []string) {
 		fmt.Println("   1. Start your emulator: avdslim start")
 		fmt.Println("   2. Install your debug APKs / log into test accounts")
 		fmt.Println("   3. Run: avdslim snapshot")
-		return
+		os.Exit(1)
 	}
 
+	// With several emulators and no serial, ResolveDevice lists them and asks,
+	// rather than snapshotting whichever adb happened to list first.
+	var targetArgs []string
 	if serial != "" {
-		s, err := client.ResolveDevice([]string{serial})
-		if err != nil {
-			fmt.Printf("❌ %v\n", err)
-			return
-		}
-		serial = s
-	} else if len(running) == 1 {
-		serial = running[0].Serial
-	} else {
-		fmt.Printf("Multiple running emulators detected. Using %s\n", running[0].Serial)
-		serial = running[0].Serial
+		targetArgs = []string{serial}
+	}
+	serial, err = client.ResolveDevice(targetArgs)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		os.Exit(1)
 	}
 
 	// Get AVD Name
@@ -1734,7 +1738,7 @@ func handleSnapshot(client *adb.Client, args []string) {
 	out, err := client.Exec("-s", serial, "emu", "avd", "snapshot", "save", snapName)
 	if err != nil || strings.Contains(out, "KO") {
 		fmt.Printf("❌ Failed to save snapshot: %s\n", strings.TrimSpace(out))
-		return
+		os.Exit(1)
 	}
 
 	fmt.Println()
@@ -1770,11 +1774,11 @@ func handleUnbake(args []string) {
 		targetAvd, err = selectAvdInteractively(installed, "Select an AVD to remove Golden Snapshot from")
 		if err != nil {
 			fmt.Printf("❌ %v\n", err)
-			return
+			os.Exit(1)
 		}
 	} else {
 		fmt.Println("❌ No installed AVDs found.")
-		return
+		os.Exit(1)
 	}
 
 	snapDir := config.GoldenSnapshotDir(targetAvd)
@@ -1785,7 +1789,7 @@ func handleUnbake(args []string) {
 
 	if err := os.RemoveAll(snapDir); err != nil {
 		fmt.Printf("❌ Failed to remove snapshot: %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	fmt.Printf("✅ Removed Golden Snapshot 'avdslim_clean' for %s.\n", targetAvd)
