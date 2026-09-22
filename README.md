@@ -8,16 +8,30 @@
 [![Release](https://img.shields.io/github/v/release/kdbhalala/avdslim)](https://github.com/kdbhalala/avdslim/releases)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-AVD--SLIM-blue?logo=github-actions&logoColor=white)](https://github.com/marketplace/actions/avd-slim-android-emulator-ram-ci-optimizer)
 
-`avdslim` is a lightweight, zero-dependency CLI tool that reduces Android Virtual Device (AVD) host memory consumption from **~8 GB down to ~1.5 GB** and cuts idle CPU overhead to near-zero on Apple Silicon & Linux.
+`avdslim` is a lightweight, zero-dependency CLI tool that cuts Android Virtual Device (AVD) host memory from **~8.5 GB to ~2.5 GB** in Activity Monitor (**~1.5 GB** of it actually resident) and cuts idle CPU overhead to near-zero on Apple Silicon & Linux.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
+│  Activity Monitor (phys_footprint), Pixel 10 Pro:                      │
 │  Before:  qemu-system-aarch64  ██████████████████████████  8,518 MB    │
-│  After:   qemu-system-aarch64  █████                       1,560 MB    │
+│  After:   qemu-system-aarch64  ████████                    2,498 MB    │
 │                                                                        │
-│  ⚡ Reclaimed: ~6.0 GB host RAM (82% reduction)                        │
+│  ⚡ Reclaimed: ~6.0 GB host RAM (71% reduction)                        │
 └────────────────────────────────────────────────────────────────────────┘
 ```
+
+## ⚡ Quick Start
+
+```bash
+brew tap kdbhalala/avdslim https://github.com/kdbhalala/avdslim.git && brew install avdslim
+avdslim doctor      # read-only audit: what is costing RAM on this machine
+avdslim tune-avd    # 1536 MB + host GPU in the AVD's config.ini (backup kept)
+avdslim start       # launch with -lowram; slims the guest once it boots
+avdslim off         # undo the guest changes any time
+```
+
+Launching from Android Studio's ▶ button instead? See the optional
+[`install-shim`](#1-android-studio-1-click-integration-install-shim) below.
 
 ---
 
@@ -32,7 +46,7 @@ The #1 fear with debloating tools is silent breakage. `avdslim` is designed to b
 | **Android System WebView** | ✅ **100% Active** | Chromium engine, JavaScript, and in-app browsers untouched |
 | **Flutter / React Native / Native** | ✅ **100% Active** | Hot reload, DevTools, debugging, and JNI/NDK runtimes work 100% |
 | **Localhost & Network Sockets** | ✅ **100% Active** | TCP/UDP, Metro bundler (`:8081`), and adb reverse unaffected |
-| **Zero-Risk Revert (`restore`)** | ✅ **Instant Undo** | One command (`avdslim restore`) instantly re-enables all stock services |
+| **Full Revert (`off`)** | ✅ **One Command** | `avdslim off` re-enables every package avdslim disabled and puts each changed setting back to its previous value. If a package can't be re-enabled, it says which and `off` can be re-run. After `avdslim bake`, also run `avdslim unbake` (the snapshot is slimmed). |
 
 ---
 

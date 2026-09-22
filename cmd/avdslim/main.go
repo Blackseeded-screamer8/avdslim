@@ -161,7 +161,7 @@ Commands:
                                 --keep=<package> (preserve specific package, e.g. Maps)
                                 --no-anim (turn animations 0x for instant UI response)
                                 --skip=<groups> (leave alone: bluetooth,bglimit,sync,location,setup)
-  restore, off         Instant 100%% stock restore (re-enables packages, animations & sync)
+  restore, off         Undo 'on': re-enable disabled packages & restore changed settings
   enable <target> [dev] Re-enable a feature or package
                        Guest (running AVD): bluetooth, animations, sync, location, bglimit
                        Host (config.ini):   audio, camera, dpad, bootanim — needs a restart

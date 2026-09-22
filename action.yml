@@ -1,5 +1,5 @@
 name: 'AVD-SLIM — Android Emulator RAM & CI Optimizer'
-description: 'Slash Android emulator memory from 8GB to 1.5GB on GitHub Actions CI runners for faster, parallel UI testing.'
+description: 'Cut Android emulator host memory from ~8.5 GB to ~2.5 GB on GitHub Actions CI runners for faster, parallel UI testing.'
 author: 'kdbhalala'
 branding:
   icon: 'zap'

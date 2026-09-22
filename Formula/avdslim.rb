@@ -1,5 +1,5 @@
 class Avdslim < Formula
-  desc "Drop Android Virtual Device (AVD) RAM from ~8GB to ~1.5GB on Apple Silicon & Linux"
+  desc "Cut Android emulator (AVD) host RAM from ~8.5 GB to ~2.5 GB on Apple Silicon & Linux"
   homepage "https://github.com/kdbhalala/avdslim"
   version "1.0.12"
   license "MIT"
