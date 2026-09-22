@@ -178,9 +178,16 @@ func SetHostFeature(avdName, feature string, on bool) ([]string, error) {
 	}
 
 	// Keep the one-time backup TuneAvd relies on, so config.ini stays reversible.
-	if _, err := os.Stat(path + ".bak"); os.IsNotExist(err) {
-		if data, readErr := os.ReadFile(path); readErr == nil {
-			_ = os.WriteFile(path+".bak", data, 0644)
+	if _, err := os.Stat(path + ".bak"); err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("cannot check backup %s.bak: %w", path, err)
+		}
+		data, err := os.ReadFile(path)
+		if err == nil {
+			err = os.WriteFile(path+".bak", data, 0644)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("refusing to change %q without a backup: %w", avdName, err)
 		}
 	}
 

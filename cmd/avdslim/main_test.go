@@ -146,6 +146,26 @@ func TestOffWarnsAboutGoldenSnapshot(t *testing.T) {
 	mustContain(t, out, "Golden Snapshot", "avdslim unbake Slim_Pixel_5")
 }
 
+// unbake must delete the snapshot where every other command looks for it:
+// under ANDROID_AVD_HOME when set, not ~/.android/avd.
+func TestUnbakeHonorsAndroidAvdHome(t *testing.T) {
+	d := newDevice(t, false)
+	avd := filepath.Join(d.home, "avd", "Pixel.avd")
+	snap := filepath.Join(avd, "snapshots", "avdslim_clean")
+	if err := os.MkdirAll(snap, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(avd, "config.ini"), []byte("hw.ramSize=1536\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ := d.run("unbake", "Pixel")
+	mustContain(t, out, "Removed Golden Snapshot")
+	if _, err := os.Stat(snap); err == nil {
+		t.Error("snapshot still there")
+	}
+}
+
 func TestOnFlags(t *testing.T) {
 	d := newDevice(t, true)
 	out, ok := d.run("on", "--no-anim", "--skip=bluetooth,sync", "--keep=com.google.android.youtube")

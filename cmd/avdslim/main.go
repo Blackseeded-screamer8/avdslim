@@ -1133,21 +1133,32 @@ func handleRestart(client *adb.Client, args []string) {
 	fmt.Printf("🔄 Gracefully shutting down %s (%s)...\n", serial, avdName)
 	client.Exec("-s", serial, "emu", "kill")
 
+	stopped := false
 	for i := 0; i < 10; i++ {
 		time.Sleep(1 * time.Second)
 		if pid := host.FindHostPidForSerial(serial); pid == 0 {
+			stopped = true
 			break
 		}
+	}
+	// Purging files under a live emulator, then launching a second one on the
+	// same AVD, corrupts it.
+	if !stopped {
+		fmt.Printf("❌ %s is still running after 10 s. Stop it (avdslim stop %s -f) and retry.\n", serial, serial)
+		os.Exit(1)
 	}
 	fmt.Println("✓ Emulator process stopped.")
 
 	// Purge stale runtime cache & snapshots
-	home, _ := os.UserHomeDir()
-	avdDir := filepath.Join(home, ".android", "avd", avdName+".avd")
+	hadGolden := config.HasGoldenSnapshot(avdName)
+	avdDir := config.AvdDir(avdName)
 	_ = os.Remove(filepath.Join(avdDir, "hardware-qemu.ini"))
 	_ = os.Remove(filepath.Join(avdDir, "hardware-qemu.ini.lock"))
 	_ = os.RemoveAll(filepath.Join(avdDir, "snapshots"))
 	fmt.Println("✓ Purged stale hardware-qemu.ini and snapshots.")
+	if hadGolden {
+		fmt.Printf("ℹ️  That included the Golden Snapshot. Re-create it with: avdslim bake %s\n", avdName)
+	}
 
 	launchArgs := []string{avdName, "--slim"}
 	for _, a := range args {
@@ -1463,8 +1474,7 @@ func handleBake(client *adb.Client, args []string) {
 	}
 
 	// Clean existing snapshot directory
-	home, _ := os.UserHomeDir()
-	snapDir := filepath.Join(home, ".android", "avd", targetAvd+".avd", "snapshots", "avdslim_clean")
+	snapDir := config.GoldenSnapshotDir(targetAvd)
 	_ = os.RemoveAll(snapDir)
 
 	// 2. Launch cold emulator (DO NOT pass -no-snapshot-save, DO pass -no-snapshot-load)
@@ -1706,8 +1716,7 @@ func handleUnbake(args []string) {
 		return
 	}
 
-	home, _ := os.UserHomeDir()
-	snapDir := filepath.Join(home, ".android", "avd", targetAvd+".avd", "snapshots", "avdslim_clean")
+	snapDir := config.GoldenSnapshotDir(targetAvd)
 	if _, err := os.Stat(snapDir); os.IsNotExist(err) {
 		fmt.Printf("ℹ️  No Golden Snapshot found for %s.\n", targetAvd)
 		return

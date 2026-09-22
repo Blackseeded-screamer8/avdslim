@@ -171,9 +171,17 @@ func onOff(on bool) string {
 	return "disabled"
 }
 
+// AvdDir is avdName's <name>.avd directory, honoring ANDROID_AVD_HOME.
+func AvdDir(avdName string) string {
+	return filepath.Join(GetAvdBaseDir(), avdName+".avd")
+}
+
+// GoldenSnapshotDir is where `avdslim bake` saves avdName's snapshot.
+func GoldenSnapshotDir(avdName string) string {
+	return filepath.Join(AvdDir(avdName), "snapshots", "avdslim_clean")
+}
+
 func HasGoldenSnapshot(avdName string) bool {
-	avdBase := GetAvdBaseDir()
-	snapDir := filepath.Join(avdBase, avdName+".avd", "snapshots", "avdslim_clean")
-	info, err := os.Stat(snapDir)
+	info, err := os.Stat(GoldenSnapshotDir(avdName))
 	return err == nil && info.IsDir()
 }

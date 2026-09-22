@@ -23,6 +23,28 @@ func writeTestAvd(t *testing.T, name, contents string) string {
 	return cfg
 }
 
+// Without config.ini.bak the change cannot be undone, so no backup, no change
+// (the same rule TuneAvd follows).
+func TestSetHostFeatureRefusesWithoutBackup(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	const orig = "hw.audioOutput=no\nhw.ramSize=1536\n"
+	cfg := writeTestAvd(t, "Pixel_Test", orig)
+	dir := filepath.Dir(cfg)
+	if err := os.Chmod(dir, 0555); err != nil { // config.ini stays writable; .bak cannot be created
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0755) })
+
+	if _, err := SetHostFeature("Pixel_Test", "audio", true); err == nil {
+		t.Fatal("changed config.ini without being able to back it up")
+	}
+	if b, _ := os.ReadFile(cfg); string(b) != orig {
+		t.Errorf("config.ini changed to %q", b)
+	}
+}
+
 func TestSetHostFeatureRoundTrip(t *testing.T) {
 	cfg := writeTestAvd(t, "Pixel_Test", "hw.audioOutput=no\nhw.audioInput=no\nhw.ramSize=1536\n")
 
