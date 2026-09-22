@@ -945,6 +945,13 @@ func handleLaunch(client *adb.Client, args []string) {
 		}
 	}
 
+	canonical, ok := installedAvdName(installed, avdName)
+	if !ok {
+		fmt.Printf("❌ AVD %q not found in %s. Run `avdslim list` to see installed AVDs.\n", avdName, config.GetAvdBaseDir())
+		os.Exit(1)
+	}
+	avdName = canonical
+
 	emulator := config.FindEmulatorExecutable()
 	emuArgs := []string{
 		"-avd", avdName,
@@ -976,27 +983,47 @@ func handleLaunch(client *adb.Client, args []string) {
 	fmt.Printf("🚀 Launching emulator %q with low-memory host flags:\n", avdName)
 	fmt.Printf("   emulator %s\n\n", strings.Join(emuArgs, " "))
 
+	// Keep the emulator's output: if it dies at startup, it says why there.
+	logFile, err := os.CreateTemp("", "avdslim-emulator-*.log")
+	if err != nil {
+		fmt.Printf("❌ Cannot create emulator log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer logFile.Close()
+
 	cmd := exec.Command(emulator, emuArgs...)
+	cmd.Stdout, cmd.Stderr = logFile, logFile
 	host.SetDetached(cmd)
 	if err := cmd.Start(); err != nil {
-		fmt.Printf("Failed to launch emulator: %v\n", err)
-		return
+		fmt.Printf("❌ Failed to launch emulator: %v\n", err)
+		os.Exit(1)
 	}
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
 
-	fmt.Printf("✓ Emulator process spawned (PID: %d).\n", cmd.Process.Pid)
+	fmt.Printf("✓ Emulator process spawned (PID: %d, log: %s).\n", cmd.Process.Pid, logFile.Name())
+
+	// An emulator that fails (bad image, locked AVD) exits within seconds.
+	select {
+	case err := <-exited:
+		reportEmulatorExit(err, logFile.Name())
+	case <-time.After(3 * time.Second):
+	}
 
 	if doSlim {
 		fmt.Println("⏳ Waiting for emulator to finish booting...")
-		_, _ = client.Exec("-s", serial, "wait-for-device")
-
 		booted := false
-		for i := 0; i < 60; i++ {
-			res, _ := client.Exec("-s", serial, "shell", "getprop", "sys.boot_completed")
-			if strings.TrimSpace(res) == "1" {
-				booted = true
-				break
+		for i := 0; i < 60 && !booted; i++ {
+			select {
+			case err := <-exited:
+				reportEmulatorExit(err, logFile.Name())
+			default:
 			}
-			time.Sleep(2 * time.Second)
+			res, _ := client.Exec("-s", serial, "shell", "getprop", "sys.boot_completed")
+			booted = strings.TrimSpace(res) == "1"
+			if !booted {
+				time.Sleep(2 * time.Second)
+			}
 		}
 
 		if booted {
@@ -1010,6 +1037,32 @@ func handleLaunch(client *adb.Client, args []string) {
 			fmt.Println("⚠️  Boot timed out after 120s. You can run `avdslim on` manually.")
 		}
 	}
+}
+
+// installedAvdName returns the installed AVD's exact name, matching case-insensitively
+// (macOS users may type names in any case; the emulator on Linux needs the exact one).
+func installedAvdName(installed []map[string]string, name string) (string, bool) {
+	for _, avd := range installed {
+		if strings.EqualFold(avd["name"], name) {
+			return avd["name"], true
+		}
+	}
+	return "", false
+}
+
+// reportEmulatorExit explains an emulator that quit during startup, with the
+// end of its log, and exits 1.
+func reportEmulatorExit(err error, logPath string) {
+	fmt.Printf("❌ The emulator exited during startup (%v). Last lines of %s:\n", err, logPath)
+	data, _ := os.ReadFile(logPath)
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) > 15 {
+		lines = lines[len(lines)-15:]
+	}
+	for _, l := range lines {
+		fmt.Println("   " + l)
+	}
+	os.Exit(1)
 }
 
 func handleStop(client *adb.Client, args []string) {
@@ -1098,11 +1151,11 @@ func handleStop(client *adb.Client, args []string) {
 			break
 		}
 	}
-	if stopped {
-		fmt.Println("✓ Emulator process stopped cleanly.")
-	} else {
-		fmt.Printf("⚠️  Emulator %s did not stop within 10s.\n", serial)
+	if !stopped {
+		fmt.Printf("❌ Emulator %s did not stop within 10s.\n\n", serial)
+		os.Exit(1)
 	}
+	fmt.Println("✓ Emulator process stopped cleanly.")
 	fmt.Println()
 }
 

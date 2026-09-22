@@ -378,6 +378,73 @@ func TestCreateFailures(t *testing.T) {
 	}
 }
 
+// fakeEmulator "boots" by registering its -port with the fake adb, or, with
+// emulator_crash present, dies the way a broken system image does.
+const fakeEmulator = `#!/bin/bash
+D="$(dirname "$0")"
+echo "$*" >> "$D/emulator_calls"
+if [ -f "$D/emulator_crash" ]; then
+  echo "PANIC: Missing emulator engine program for 'arm64' CPU."
+  exit 1
+fi
+while [ $# -gt 0 ]; do [ "$1" = "-port" ] && port="$2"; shift; done
+printf 'List of devices attached\nemulator-%s\tdevice\n' "$port" > "$D/devices"
+echo 1 > "$D/prop_sys.boot_completed"
+sleep 5
+`
+
+func (d *device) withEmulator(avd string) {
+	d.write("emulator", fakeEmulator)
+	if err := os.Chmod(filepath.Join(d.dir, "emulator"), 0755); err != nil {
+		d.t.Fatal(err)
+	}
+	dir := filepath.Join(d.home, "avd", avd+".avd")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		d.t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.ini"), []byte("hw.ramSize=1536\n"), 0644); err != nil {
+		d.t.Fatal(err)
+	}
+	d.write("packages", "com.google.android.apps.maps\n")
+}
+
+func TestStartLaunchesAndSlims(t *testing.T) {
+	d := newDevice(t, false)
+	d.withEmulator("Pixel")
+
+	out, ok := d.run("start", "pixel") // any case, like on macOS
+	if !ok {
+		t.Fatalf("start failed:\n%s", out)
+	}
+	mustContain(t, out, "Boot complete", "Slimming complete")
+	mustContain(t, d.read("emulator_calls"), "-avd Pixel ", "-lowram", "-memory 1536", "-no-snapshot-load")
+}
+
+func TestStartReportsEmulatorCrash(t *testing.T) {
+	d := newDevice(t, false)
+	d.withEmulator("Pixel")
+	d.write("emulator_crash", "")
+
+	out, ok := d.run("start", "Pixel")
+	if ok {
+		t.Fatalf("start succeeded although the emulator crashed:\n%s", out)
+	}
+	mustContain(t, out, "exited during startup", "PANIC: Missing emulator engine")
+}
+
+func TestStartRejectsUnknownAvd(t *testing.T) {
+	d := newDevice(t, false)
+	d.withEmulator("Pixel")
+	out, ok := d.run("start", "Nope")
+	if ok {
+		t.Fatalf("start succeeded for an unknown AVD:\n%s", out)
+	}
+	mustContain(t, out, `AVD "Nope" not found`)
+	if d.read("emulator_calls") != "" {
+		t.Error("emulator launched for an unknown AVD")
+	}
+}
+
 func TestUnknownCommand(t *testing.T) {
 	d := newDevice(t, false)
 	out, ok := d.run("frobnicate")
