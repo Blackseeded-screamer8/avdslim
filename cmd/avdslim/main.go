@@ -983,50 +983,17 @@ func handleLaunch(client *adb.Client, args []string) {
 	fmt.Printf("🚀 Launching emulator %q with low-memory host flags:\n", avdName)
 	fmt.Printf("   emulator %s\n\n", strings.Join(emuArgs, " "))
 
-	// Keep the emulator's output: if it dies at startup, it says why there.
-	logFile, err := os.CreateTemp("", "avdslim-emulator-*.log")
-	if err != nil {
-		fmt.Printf("❌ Cannot create emulator log file: %v\n", err)
-		os.Exit(1)
-	}
-	defer logFile.Close()
-
-	cmd := exec.Command(emulator, emuArgs...)
-	cmd.Stdout, cmd.Stderr = logFile, logFile
-	host.SetDetached(cmd)
-	if err := cmd.Start(); err != nil {
-		fmt.Printf("❌ Failed to launch emulator: %v\n", err)
-		os.Exit(1)
-	}
-	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
-
-	fmt.Printf("✓ Emulator process spawned (PID: %d, log: %s).\n", cmd.Process.Pid, logFile.Name())
-
+	emu := spawnEmulator(emulator, emuArgs)
 	// An emulator that fails (bad image, locked AVD) exits within seconds.
 	select {
-	case err := <-exited:
-		reportEmulatorExit(err, logFile.Name())
+	case err := <-emu.exited:
+		reportEmulatorExit(err, emu.logPath)
 	case <-time.After(3 * time.Second):
 	}
 
 	if doSlim {
 		fmt.Println("⏳ Waiting for emulator to finish booting...")
-		booted := false
-		for i := 0; i < 60 && !booted; i++ {
-			select {
-			case err := <-exited:
-				reportEmulatorExit(err, logFile.Name())
-			default:
-			}
-			res, _ := client.Exec("-s", serial, "shell", "getprop", "sys.boot_completed")
-			booted = strings.TrimSpace(res) == "1"
-			if !booted {
-				time.Sleep(2 * time.Second)
-			}
-		}
-
-		if booted {
+		if emu.waitForBoot(client, serial, 60) {
 			if hasGolden && !forceCold {
 				fmt.Println("✓ Instant boot complete via Golden Snapshot! Refreshing slim state...")
 			} else {
@@ -1037,6 +1004,64 @@ func handleLaunch(client *adb.Client, args []string) {
 			fmt.Println("⚠️  Boot timed out after 120s. You can run `avdslim on` manually.")
 		}
 	}
+}
+
+// runningEmulator is an emulator avdslim spawned, with its output in logPath.
+type runningEmulator struct {
+	cmd     *exec.Cmd
+	exited  chan error
+	logPath string
+}
+
+// spawnEmulator starts the emulator detached, keeping its output in a temp
+// log: if it dies at startup, that is where it says why. Exits 1 on failure.
+func spawnEmulator(emulator string, args []string) *runningEmulator {
+	logFile, err := os.CreateTemp("", "avdslim-emulator-*.log")
+	if err != nil {
+		fmt.Printf("❌ Cannot create emulator log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer logFile.Close() // the child keeps its own descriptor
+
+	cmd := exec.Command(emulator, args...)
+	cmd.Stdout, cmd.Stderr = logFile, logFile
+	host.SetDetached(cmd)
+	if err := cmd.Start(); err != nil {
+		fmt.Printf("❌ Failed to launch emulator: %v\n", err)
+		os.Exit(1)
+	}
+	e := &runningEmulator{cmd: cmd, exited: make(chan error, 1), logPath: logFile.Name()}
+	go func() { e.exited <- cmd.Wait() }()
+	fmt.Printf("✓ Emulator process spawned (PID: %d, log: %s).\n", cmd.Process.Pid, e.logPath)
+	return e
+}
+
+// waitForBoot polls sys.boot_completed every 2 s, up to tries times. If the
+// emulator exits meanwhile, it reports why and exits 1.
+func (e *runningEmulator) waitForBoot(client *adb.Client, serial string, tries int) bool {
+	for i := 0; i < tries; i++ {
+		select {
+		case err := <-e.exited:
+			reportEmulatorExit(err, e.logPath)
+		default:
+		}
+		if res, _ := client.Exec("-s", serial, "shell", "getprop", "sys.boot_completed"); strings.TrimSpace(res) == "1" {
+			return true
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return false
+}
+
+// waitStopped waits up to 10 s for serial's emulator process to go away.
+func waitStopped(serial string) bool {
+	for i := 0; i < 10; i++ {
+		time.Sleep(1 * time.Second)
+		if host.FindHostPidForSerial(serial) == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // installedAvdName returns the installed AVD's exact name, matching case-insensitively
@@ -1142,16 +1167,7 @@ func handleStop(client *adb.Client, args []string) {
 
 	fmt.Printf("🛑 Gracefully shutting down %s (%s)...\n", serial, avdName)
 	client.Exec("-s", serial, "emu", "kill")
-
-	stopped := false
-	for i := 0; i < 10; i++ {
-		time.Sleep(1 * time.Second)
-		if pid := host.FindHostPidForSerial(serial); pid == 0 {
-			stopped = true
-			break
-		}
-	}
-	if !stopped {
+	if !waitStopped(serial) {
 		fmt.Printf("❌ Emulator %s did not stop within 10s.\n\n", serial)
 		os.Exit(1)
 	}
@@ -1186,17 +1202,9 @@ func handleRestart(client *adb.Client, args []string) {
 	fmt.Printf("🔄 Gracefully shutting down %s (%s)...\n", serial, avdName)
 	client.Exec("-s", serial, "emu", "kill")
 
-	stopped := false
-	for i := 0; i < 10; i++ {
-		time.Sleep(1 * time.Second)
-		if pid := host.FindHostPidForSerial(serial); pid == 0 {
-			stopped = true
-			break
-		}
-	}
 	// Purging files under a live emulator, then launching a second one on the
 	// same AVD, corrupts it.
-	if !stopped {
+	if !waitStopped(serial) {
 		fmt.Printf("❌ %s is still running after 10 s. Stop it (avdslim stop %s -f) and retry.\n", serial, serial)
 		os.Exit(1)
 	}
@@ -1515,22 +1523,23 @@ func handleBake(client *adb.Client, args []string) {
 	fmt.Println("   • Captures 'avdslim_clean' snapshot for instant ~1.5s launches")
 	fmt.Println()
 
-	// 1. Check if an emulator for this AVD is already running. If so, kill it to ensure cold boot.
+	// 1. Stop a running instance of this AVD (exact name: "Pixel" must not
+	// match "Pixel_10_Pro") so the bake is a cold boot.
 	running, _ := client.GetRunningEmulators()
 	for _, emu := range running {
-		nameOut, _ := client.Exec("-s", emu.Serial, "emu", "avd", "name")
-		if strings.Contains(nameOut, targetAvd) {
-			fmt.Printf("🔄 Stopping active emulator instance (%s) for clean baking...\n", emu.Serial)
-			client.Exec("-s", emu.Serial, "emu", "kill")
-			time.Sleep(2 * time.Second)
+		if !strings.EqualFold(avdNameForSerial(client, emu.Serial), targetAvd) {
+			continue
+		}
+		fmt.Printf("🔄 Stopping active emulator instance (%s) for clean baking...\n", emu.Serial)
+		client.Exec("-s", emu.Serial, "emu", "kill")
+		if !waitStopped(emu.Serial) {
+			fmt.Printf("❌ %s did not stop. Stop it (avdslim stop %s -f) and retry.\n", emu.Serial, emu.Serial)
+			os.Exit(1)
 		}
 	}
 
-	// Clean existing snapshot directory
-	snapDir := config.GoldenSnapshotDir(targetAvd)
-	_ = os.RemoveAll(snapDir)
-
-	// 2. Launch cold emulator (DO NOT pass -no-snapshot-save, DO pass -no-snapshot-load)
+	// 2. Launch cold emulator (DO NOT pass -no-snapshot-save, DO pass -no-snapshot-load).
+	// The existing Golden Snapshot stays until the new one is ready to save.
 	emulator := config.FindEmulatorExecutable()
 	gpuMode := config.GetRecommendedGpuMode()
 	emuArgs := []string{
@@ -1549,31 +1558,29 @@ func handleBake(client *adb.Client, args []string) {
 	}
 
 	fmt.Println("🚀 Spawning baseline emulator...")
-	cmd := exec.Command(emulator, emuArgs...)
-	if err := cmd.Start(); err != nil {
-		fmt.Printf("❌ Failed to start emulator: %v\n", err)
-		return
+	emu := spawnEmulator(emulator, emuArgs)
+	snapDir := config.GoldenSnapshotDir(targetAvd)
+	oldSnap := snapDir + ".avdslim-old" // the previous snapshot while saving the new one
+	// abort stops the baking emulator, puts any previous snapshot back, and exits 1.
+	abort := func(msg string) {
+		fmt.Printf("❌ %s Aborting bake.\n", msg)
+		client.Exec("-s", targetSerial, "emu", "kill")
+		if !waitStopped(targetSerial) {
+			_ = emu.cmd.Process.Kill()
+		}
+		if _, err := os.Stat(oldSnap); err == nil {
+			_ = os.RemoveAll(snapDir)
+			_ = os.Rename(oldSnap, snapDir)
+		}
+		if config.HasGoldenSnapshot(targetAvd) {
+			fmt.Println("   Your previous Golden Snapshot is unchanged.")
+		}
+		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Emulator spawned (PID: %d). Waiting for boot completion...\n", cmd.Process.Pid)
-	_, _ = client.Exec("-s", targetSerial, "wait-for-device")
-
-	booted := false
-	for i := 0; i < 90; i++ {
-		res, _ := client.Exec("-s", targetSerial, "shell", "getprop", "sys.boot_completed")
-		if strings.TrimSpace(res) == "1" {
-			booted = true
-			break
-		}
-		time.Sleep(2 * time.Second)
-	}
-
-	if !booted || targetSerial == "" {
-		fmt.Println("❌ Timed out waiting for emulator boot. Aborting bake.")
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-		return
+	fmt.Println("⏳ Waiting for boot completion...")
+	if !emu.waitForBoot(client, targetSerial, 90) {
+		abort("Timed out waiting for emulator boot.")
 	}
 
 	fmt.Printf("✓ Boot complete on %s! Settling system daemons (4s)...\n", targetSerial)
@@ -1583,41 +1590,42 @@ func handleBake(client *adb.Client, args []string) {
 	fmt.Println("⚡ Pruning bloatware & tuning runtime settings...")
 	count, err := client.Slim(targetSerial, aggressive, keepPackages, skip)
 	if err != nil {
-		fmt.Printf("⚠️  Warning during slim: %v\n", err)
-	} else {
-		fmt.Printf("✓ Disabled %d bloat packages and trimmed memory.\n", count)
+		abort(fmt.Sprintf("Slimming failed, so the snapshot would not be slim: %v.", err))
 	}
+	fmt.Printf("✓ Disabled %d bloat packages and trimmed memory.\n", count)
 
 	time.Sleep(2 * time.Second)
 	client.Exec("-s", targetSerial, "shell", "sync")
 
-	// 4. Save golden snapshot
+	// 4. Replace the golden snapshot now that the new state is ready.
 	fmt.Println("📸 Capturing Golden Snapshot 'avdslim_clean'...")
+	_ = os.RemoveAll(oldSnap)
+	if _, err := os.Stat(snapDir); err == nil {
+		if err := os.Rename(snapDir, oldSnap); err != nil {
+			abort(fmt.Sprintf("Cannot set the previous snapshot aside: %v.", err))
+		}
+	}
 	snapOut, err := client.Exec("-s", targetSerial, "emu", "avd", "snapshot", "save", "avdslim_clean")
 	if err != nil || strings.Contains(snapOut, "KO") {
-		fmt.Printf("⚠️  Snapshot save response: %s\n", strings.TrimSpace(snapOut))
-	} else {
-		fmt.Printf("✓ Snapshot saved successfully: %s\n", strings.TrimSpace(snapOut))
+		abort(fmt.Sprintf("Snapshot save failed: %s.", strings.TrimSpace(snapOut)))
 	}
-
 	time.Sleep(2 * time.Second)
 
 	// 5. Verify snapshot on host filesystem
-	if config.HasGoldenSnapshot(targetAvd) {
-		fmt.Println("✨ Golden Snapshot verified on disk!")
+	if !config.HasGoldenSnapshot(targetAvd) {
+		abort(fmt.Sprintf("The emulator reported a save, but %s does not exist.", snapDir))
 	}
+	_ = os.RemoveAll(oldSnap)
+	fmt.Println("✨ Golden Snapshot verified on disk!")
 
 	// 6. Graceful shutdown
 	fmt.Println("🛑 Gracefully shutting down baking emulator...")
 	client.Exec("-s", targetSerial, "emu", "kill")
-
-	for i := 0; i < 10; i++ {
-		time.Sleep(1 * time.Second)
-		if pid := host.FindHostPidForSerial(targetSerial); pid == 0 {
-			break
-		}
+	if waitStopped(targetSerial) {
+		fmt.Println("✓ Emulator shut down cleanly.")
+	} else {
+		fmt.Printf("⚠️  %s is still running; stop it with: avdslim stop %s -f\n", targetSerial, targetSerial)
 	}
-	fmt.Println("✓ Emulator shut down cleanly.")
 
 	fmt.Println()
 	fmt.Println("════════════════════════════════════════════════════════════════════════")

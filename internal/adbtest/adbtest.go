@@ -22,6 +22,10 @@ import (
 //	pm_broken           `pm list packages` fails
 //	enable_fails        packages (one per line) that `pm enable` rejects
 //	readonly            writing the state file fails
+//	snapshot_fails      `emu avd snapshot save` answers KO
+//
+// `emu avd snapshot save NAME` creates $ANDROID_AVD_HOME/<avd>.avd/snapshots/NAME
+// with a "marker" file reading "new-snapshot"; `emu kill` clears `devices`.
 const script = `#!/bin/bash
 D="$(dirname "$0")"
 echo "$*" >> "$D/calls"
@@ -30,7 +34,15 @@ case "$1" in
   version) echo "Android Debug Bridge version 1.0.41 (fake)"; exit 0 ;;
 esac
 if [ "$1" = "-s" ] && [ "$3" = "emu" ]; then
-  cat "$D/avd_$2" 2>/dev/null || echo "Test_AVD"
+  name=$(cat "$D/avd_$2" 2>/dev/null || echo "Test_AVD")
+  case "$4 $5 $6" in
+    "avd snapshot save")
+      [ -f "$D/snapshot_fails" ] && { echo "KO: snapshot save failed"; exit 0; }
+      mkdir -p "$ANDROID_AVD_HOME/$name.avd/snapshots/$7" && echo "new-snapshot" > "$ANDROID_AVD_HOME/$name.avd/snapshots/$7/marker"
+      echo OK ;;
+    "kill "*) rm -f "$D/devices"; echo OK ;;
+    *) echo "$name" ;;
+  esac
   exit 0
 fi
 [ "$3" = "shell" ] || exit 0

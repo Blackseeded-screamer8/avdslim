@@ -387,7 +387,12 @@ if [ -f "$D/emulator_crash" ]; then
   echo "PANIC: Missing emulator engine program for 'arm64' CPU."
   exit 1
 fi
-while [ $# -gt 0 ]; do [ "$1" = "-port" ] && port="$2"; shift; done
+while [ $# -gt 0 ]; do
+  [ "$1" = "-port" ] && port="$2"
+  [ "$1" = "-avd" ] && avd="$2"
+  shift
+done
+echo "$avd" > "$D/avd_emulator-$port"
 printf 'List of devices attached\nemulator-%s\tdevice\n' "$port" > "$D/devices"
 echo 1 > "$D/prop_sys.boot_completed"
 sleep 5
@@ -442,6 +447,61 @@ func TestStartRejectsUnknownAvd(t *testing.T) {
 	mustContain(t, out, `AVD "Nope" not found`)
 	if d.read("emulator_calls") != "" {
 		t.Error("emulator launched for an unknown AVD")
+	}
+}
+
+// oldSnapshot gives Pixel a previous Golden Snapshot and returns its marker path.
+func (d *device) oldSnapshot() string {
+	snap := filepath.Join(d.home, "avd", "Pixel.avd", "snapshots", "avdslim_clean")
+	if err := os.MkdirAll(snap, 0755); err != nil {
+		d.t.Fatal(err)
+	}
+	marker := filepath.Join(snap, "marker")
+	if err := os.WriteFile(marker, []byte("old-snapshot\n"), 0644); err != nil {
+		d.t.Fatal(err)
+	}
+	return marker
+}
+
+func TestBakeReplacesSnapshot(t *testing.T) {
+	d := newDevice(t, false)
+	d.withEmulator("Pixel")
+	marker := d.oldSnapshot()
+
+	out, ok := d.run("bake", "Pixel")
+	if !ok {
+		t.Fatalf("bake failed:\n%s", out)
+	}
+	mustContain(t, out, "Golden Snapshot Baked Successfully")
+	if b, _ := os.ReadFile(marker); string(b) != "new-snapshot\n" {
+		t.Errorf("snapshot marker = %q, want the new snapshot", b)
+	}
+	if _, err := os.Stat(filepath.Dir(marker) + ".avdslim-old"); err == nil {
+		t.Error("previous snapshot copy left behind")
+	}
+}
+
+// A failed bake must not cost the user the snapshot they already had.
+func TestBakeFailureKeepsPreviousSnapshot(t *testing.T) {
+	for _, tc := range []struct{ name, failSwitch, want string }{
+		{"slim fails", "readonly", "Slimming failed"},
+		{"save fails", "snapshot_fails", "Snapshot save failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newDevice(t, false)
+			d.withEmulator("Pixel")
+			marker := d.oldSnapshot()
+			d.write(tc.failSwitch, "")
+
+			out, ok := d.run("bake", "Pixel")
+			if ok {
+				t.Fatalf("bake succeeded:\n%s", out)
+			}
+			mustContain(t, out, tc.want, "previous Golden Snapshot is unchanged")
+			if b, _ := os.ReadFile(marker); string(b) != "old-snapshot\n" {
+				t.Errorf("previous snapshot lost: marker = %q", b)
+			}
+		})
 	}
 }
 
