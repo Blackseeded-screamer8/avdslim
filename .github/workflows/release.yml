@@ -24,6 +24,13 @@ jobs:
         with:
           go-version: '1.22'
 
+      # A tag must never publish a build that fails the checks ci.yml runs.
+      - name: Verify
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+          go vet ./...
+          go test -race ./...
+
       - name: Build binaries
         run: |
           mkdir -p dist

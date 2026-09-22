@@ -29,7 +29,8 @@ runs:
         if command -v avdslim >/dev/null 2>&1; then
           echo "avdslim already installed: $(avdslim version)"
         else
-          curl -fsSL https://raw.githubusercontent.com/kdbhalala/avdslim/main/install.sh | bash
+          # The installer from this action's own ref (e.g. @v1.0.13), not main.
+          bash "${{ github.action_path }}/install.sh"
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           export PATH="$HOME/.local/bin:$PATH"
         fi
@@ -37,9 +38,11 @@ runs:
     - name: Configure Emulator Shim
       if: inputs.install-shim == 'true'
       shell: bash
+      env:
+        RAM: ${{ inputs.ram }}
       run: |
         export PATH="$HOME/.local/bin:$PATH"
-        avdslim install-shim --ram=${{ inputs.ram }}
+        avdslim install-shim "--ram=$RAM"
 
     - name: Start AVD-SLIM Watcher
       if: inputs.watch == 'true'

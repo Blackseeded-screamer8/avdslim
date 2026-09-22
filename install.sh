@@ -35,19 +35,35 @@ case "$ARCH" in
 esac
 
 TARBALL="avdslim_${VERSION}_${OS_NAME}_${ARCH_NAME}.tar.gz"
-URL="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL}"
 
 echo "⚡ Installing AVD-SLIM (${VERSION}) for ${OS_NAME}/${ARCH_NAME}..."
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
-if command -v gh >/dev/null 2>&1; then
-  gh release download "$VERSION" --repo "$REPO" -p "$TARBALL" -D "$TMPDIR" >/dev/null 2>&1 || \
-    curl -fsSL --connect-timeout 10 --retry 3 "$URL" -o "$TMPDIR/$TARBALL"
+fetch() { # fetch <asset>
+  if command -v gh >/dev/null 2>&1 &&
+    gh release download "$VERSION" --repo "$REPO" -p "$1" -D "$TMPDIR" >/dev/null 2>&1; then
+    return 0
+  fi
+  curl -fsSL --connect-timeout 10 --retry 3 "https://github.com/${REPO}/releases/download/${VERSION}/$1" -o "$TMPDIR/$1"
+}
+
+fetch "$TARBALL"
+fetch checksums.txt
+
+# Refuse to install a binary that does not match the release's checksums.txt.
+EXPECTED=$(awk -v f="$TARBALL" '$2 == f { print $1 }' "$TMPDIR/checksums.txt")
+if command -v sha256sum >/dev/null 2>&1; then
+  ACTUAL=$(sha256sum "$TMPDIR/$TARBALL" | awk '{ print $1 }')
 else
-  curl -fsSL --connect-timeout 10 --retry 3 "$URL" -o "$TMPDIR/$TARBALL"
+  ACTUAL=$(shasum -a 256 "$TMPDIR/$TARBALL" | awk '{ print $1 }')
 fi
+if [ -z "$EXPECTED" ] || [ "$EXPECTED" != "$ACTUAL" ]; then
+  echo "❌ Checksum mismatch for $TARBALL (expected ${EXPECTED:-none}, got $ACTUAL). Not installing."
+  exit 1
+fi
+echo "✓ Checksum verified"
 
 tar -xzf "$TMPDIR/$TARBALL" -C "$TMPDIR"
 
