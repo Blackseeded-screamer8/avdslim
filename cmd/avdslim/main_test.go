@@ -125,6 +125,27 @@ func TestOnOffRoundTrip(t *testing.T) {
 	}
 }
 
+// `start` boots the Golden Snapshot with -no-snapshot-save, so it would bring
+// back the slimmed state after `off`; off must say so.
+func TestOffWarnsAboutGoldenSnapshot(t *testing.T) {
+	d := newDevice(t, true)
+	d.run("on")
+	out, _ := d.run("off")
+	if strings.Contains(out, "Golden Snapshot") {
+		t.Errorf("warned without a snapshot:\n%s", out)
+	}
+
+	d.run("on")
+	if err := os.MkdirAll(filepath.Join(d.home, "avd", "Slim_Pixel_5.avd", "snapshots", "avdslim_clean"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	out, ok := d.run("off")
+	if !ok {
+		t.Fatalf("off failed:\n%s", out)
+	}
+	mustContain(t, out, "Golden Snapshot", "avdslim unbake Slim_Pixel_5")
+}
+
 func TestOnFlags(t *testing.T) {
 	d := newDevice(t, true)
 	out, ok := d.run("on", "--no-anim", "--skip=bluetooth,sync", "--keep=com.google.android.youtube")

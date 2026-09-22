@@ -417,6 +417,11 @@ func handleOff(client *adb.Client, args []string) {
 	}
 	fmt.Println("2. Restored the system settings avdslim changed to their previous values.")
 	fmt.Printf("✅ Successfully restored %s to stock configuration.\n\n", serial)
+	if name := avdNameForSerial(client, serial); name != "" && config.HasGoldenSnapshot(name) {
+		fmt.Println("⚠️  This AVD has a slimmed Golden Snapshot. `avdslim start` boots from it,")
+		fmt.Println("   so the next launch is slimmed again. To stay stock:")
+		fmt.Printf("   avdslim unbake %s     (or launch with: avdslim start %s --cold)\n\n", name, name)
+	}
 }
 
 func handleRepair(client *adb.Client, args []string) {
