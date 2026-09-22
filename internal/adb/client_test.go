@@ -5,39 +5,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-)
 
-// fakeAdb emulates `adb -s X shell ...` for settings, the state file, and rm,
-// storing each setting as a file in dir.
-const fakeAdb = `#!/bin/bash
-D="$(dirname "$0")"
-if [ "$1" = "devices" ]; then
-  cat "$D/devices" 2>/dev/null || printf "List of devices attached\n"
-  exit 0
-fi
-if [ "$1" = "-s" ] && [ "$3" = "emu" ]; then
-  cat "$D/avd_$2" 2>/dev/null || echo "Test_AVD"
-  exit 0
-fi
-shift 2; shift # drop: -s SERIAL shell
-case "$1 $2" in
-  "settings get") cat "$D/$3_$4" 2>/dev/null || echo null ;;
-  "settings put") printf '%s' "$5" > "$D/$3_$4" ;;
-  "settings delete") rm -f "$D/$3_$4" ;;
-  "pm enable") echo "Package $3 new state: enabled" ;;
-  "cat "*) cat "$D/state" 2>/dev/null ;;
-  "rm -f") rm -f "$D/state" ;;
-  "echo "*) v="$2"; v="${v#\'}"; printf '%s' "${v%\'}" > "$D/state" ;;
-esac
-`
+	"github.com/kdbhalala/avdslim/internal/adbtest"
+)
 
 func newFake(t *testing.T) (*Client, string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake adb is a bash script")
 	}
 	dir := t.TempDir()
-	adb := filepath.Join(dir, "adb")
-	if err := os.WriteFile(adb, []byte(fakeAdb), 0755); err != nil {
+	adb, err := adbtest.Install(dir)
+	if err != nil {
 		t.Fatal(err)
 	}
 	return &Client{adbPath: adb}, dir
