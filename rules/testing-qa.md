@@ -32,8 +32,14 @@
 
 - Guest-mutating commands are tested against the fake adb: when a command
   makes a new adb call, teach `internal/adbtest` to answer it and add a
-  `main_test.go` case. Still not covered: `launch`/`restart`/`bake`/`bench`
-  (need the `emulator` binary) and host memory probes (`lsof`/`ps`/`footprint`).
+  `main_test.go` case. Failure paths use the fake's switch files
+  (`pm_broken`, `enable_fails`, `readonly`, `snapshot_fails`, see
+  `adbtest.go`). `start`/`bake` use the fake `emulator` in `main_test.go`
+  (`emulator_crash` simulates a startup death); the shim is tested in
+  `internal/shim/shim_test.go` against a temp SDK and by running the
+  generated script. Still not covered: `restart`/`bench`/`watch`/`repair`
+  and host memory probes (`lsof`/`ps`/`footprint`).
+- New failure handling gets a test that fails without the fix (RED first).
   Keep new pure logic (package-list filtering, arg parsing, ini editing,
   GPU-mode selection) in `internal/` packages so it is testable without adb.
 - Check new tests can fail: break the code with Edit, run, revert with Edit,

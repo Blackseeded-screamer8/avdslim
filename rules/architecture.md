@@ -78,6 +78,23 @@ stay independent of device state.
   ART compilation worker thread memory footprint.
 - `TuneAvd` rewrites `config.ini` from a map — key order is not preserved.
   Acceptable; do not "fix" by adding ordering unless a bug requires it.
+- Guest state record (`avdslim_state.json`) is write-ahead: `Slim` writes and
+  reads it back *before* changing anything, lists the union of every run's
+  disables, and aborts with no changes if the write fails. `Restore` deletes
+  it only after every package re-enabled; failures stay recorded for a retry.
+  It lives in the guest on purpose: it describes guest state, so `-wipe-data`
+  or a snapshot load resets both together.
+- Every host file avdslim deletes or replaces must survive failure: tune and
+  host features refuse without `config.ini.bak`; `bake` keeps the previous
+  Golden Snapshot until the new one is saved; `uninstall-shim` refuses when
+  an SDK update already replaced the shim.
+- AVD paths come from `config.AvdDir` / `GoldenSnapshotDir` (honor
+  `ANDROID_AVD_HOME`), never a hand-built `~/.android/avd`. The shim script
+  does the same via `${ANDROID_AVD_HOME:-$HOME/.android/avd}`.
+- Every `❌` exits 1 (scripts and the Action depend on it).
+- Launching goes through `spawnEmulator` + `waitForBoot`: emulator output to
+  a temp log, startup crash reported with that log, never
+  `adb wait-for-device` (hangs forever if the emulator dies).
 - Golden SDK rule the code enforces in `doctor`/`tuner`: Google APIs 4 KB
   image good; Google Play (no `adb root`, updater churn) and 16 KB page-size
   (QEMU 4096 MB floor) bad.

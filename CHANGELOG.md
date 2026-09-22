@@ -4,7 +4,25 @@
 
 ### Added
 - **`avdslim create <name>`**: creates a new AVD from the newest installed "Google APIs" 4 KB image for the host CPU (Play Store and 16 KB page-size images are never picked), via `avdmanager`, then tunes it like `tune-avd`. Options: `--api=<level>`, `--device=<id>` (default `pixel_5`), `--ram`/`--heap`/`--gpu`. Refuses to overwrite an existing AVD. It never installs images or accepts licenses; with no suitable image it prints the `sdkmanager` command to run. Finds `avdmanager` on PATH or in the SDK's `cmdline-tools/latest` or versioned (`cmdline-tools/23.0`) directory.
-- **End-to-end CLI tests without an emulator**: `cmd/avdslim/main_test.go` runs the real `main()` against a fake `adb` (`internal/adbtest`) and a fake `avdmanager`, covering `on`/`off`/`list`/`enable`/`doctor`/`create`.
+- **End-to-end CLI tests without an emulator**: `cmd/avdslim/main_test.go` runs the real `main()` against a fake `adb` (`internal/adbtest`), a fake `emulator` and a fake `avdmanager`, covering `on`/`off`/`list`/`enable`/`doctor`/`start`/`bake`/`unbake`/`create`, plus the first tests for the Android Studio shim.
+- **`install.sh` verifies the release checksum** and refuses a tarball that does not match `checksums.txt`.
+
+### Fixed
+- **`off` could miss packages.** A re-slim (`on --aggressive` then `on`, or `on --keep X`) overwrote the record of what earlier runs disabled, so `off` never re-enabled those packages. The record is now cumulative, and `--keep` re-enables a package an earlier slim disabled.
+- **`on` changed the guest without a record.** The state file is now written and read back *before* any change; if that fails, nothing is changed and `on` exits 1. A failed `pm list packages` is an error instead of a silent no-op.
+- **`off` deleted its record even when re-enabling failed.** Packages that could not be re-enabled stay recorded, `off` names them and exits 1, and can be re-run.
+- **`off` is undone by the Golden Snapshot.** `start` boots the slimmed snapshot, so `off` now says so and points at `unbake` / `start --cold`.
+- **`uninstall-shim` downgraded an updated emulator.** After an SDK update replaced the shim, it swapped the stale `emulator.real` back in. It now refuses and explains; the normal path renames in one step.
+- **The shim ignored `ANDROID_AVD_HOME`** for the Golden Snapshot and `enable audio|camera`; so did `restart`, `bake` and `unbake`. `doctor` flags older shims for users who set it.
+- **A failed `bake` deleted the existing Golden Snapshot.** The old one is kept until the new one is saved and restored on any failure. `bake` now aborts when slimming or the save fails instead of reporting success, and stops only the emulator whose AVD name matches exactly (baking `Pixel` no longer kills `Pixel_10_Pro`).
+- **`start`/`bake` hung forever when the emulator died at startup.** Emulator output now goes to a temp log; a startup crash prints its last lines and exits 1. Unknown AVD names are rejected up front.
+- **`restart` purged and relaunched while the old emulator was still running.** It now stops instead.
+- **`enable`/`disable` of host features changed `config.ini` without a backup** when the backup could not be written. They now refuse, like `tune-avd`.
+- **About 30 error paths exited 0**, so scripts and CI saw success. Every failure now exits 1. `snapshot` with several emulators running asks which one instead of using the first.
+- **Headline numbers**: the README banner compared two different metrics (82%). Like-for-like in Activity Monitor it is 8.5 GB → 2.5 GB (71%).
+
+### Changed
+- `release.yml` runs gofmt, vet and the tests (with `-race`) before publishing; the Action runs the installer from its own ref instead of `main`.
 
 ## v1.0.13 — 2026-09-21
 
