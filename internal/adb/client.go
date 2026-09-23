@@ -241,6 +241,10 @@ func (c *Client) Slim(serial string, aggressive bool, keepPackages []string, ski
 		}
 	}
 	if err != nil || len(installedMap) == 0 {
+		if strings.Contains(installedRaw, "Can't find service: package") {
+			return 0, fmt.Errorf("the guest's package manager is not running: its framework is crash-looping " +
+				"(the Android 16+ bug from avdslim <= 1.0.8). Fix it with `avdslim repair`")
+		}
 		return 0, fmt.Errorf("cannot list guest packages (is the emulator fully booted?): %s", strings.TrimSpace(installedRaw))
 	}
 

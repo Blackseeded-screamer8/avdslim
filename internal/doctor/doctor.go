@@ -216,6 +216,13 @@ func RunDoctor(client *adb.Client) {
 				}
 			}
 
+			// A crash-looping framework still reports boot_completed=1.
+			if svc, _ := client.Exec("-s", emu.Serial, "shell", "service", "check", "package"); strings.Contains(svc, "not found") {
+				fmt.Println("     🚨 Package manager not running: the Android framework is crash-looping.")
+				fmt.Printf("        -> Fix with: avdslim repair %s\n", emu.Serial)
+				issuesCount++
+			}
+
 			// Check guest root capability
 			rootCheck, _ := client.Exec("-s", emu.Serial, "shell", "su", "0", "id")
 			if strings.Contains(rootCheck, "uid=0") {

@@ -47,7 +47,7 @@ func newDevice(t *testing.T, running bool) *device {
 	}
 	if running {
 		d.write("devices", "List of devices attached\n"+serial+"\tdevice\n")
-		d.write("avd_"+serial, "Slim_Pixel_5\n")
+		d.write("avd_"+serial, "Avdslim_Test_Avd\n")
 		d.write("packages", "com.google.android.apps.maps\ncom.google.android.youtube\ncom.android.chrome\n")
 	}
 	return d
@@ -136,21 +136,21 @@ func TestOffWarnsAboutGoldenSnapshot(t *testing.T) {
 	}
 
 	d.run("on")
-	if err := os.MkdirAll(filepath.Join(d.home, "avd", "Slim_Pixel_5.avd", "snapshots", "avdslim_clean"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(d.home, "avd", "Avdslim_Test_Avd.avd", "snapshots", "avdslim_clean"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	out, ok := d.run("off")
 	if !ok {
 		t.Fatalf("off failed:\n%s", out)
 	}
-	mustContain(t, out, "Golden Snapshot", "avdslim unbake Slim_Pixel_5")
+	mustContain(t, out, "Golden Snapshot", "avdslim unbake Avdslim_Test_Avd")
 }
 
 // unbake must delete the snapshot where every other command looks for it:
 // under ANDROID_AVD_HOME when set, not ~/.android/avd.
 func TestUnbakeHonorsAndroidAvdHome(t *testing.T) {
 	d := newDevice(t, false)
-	avd := filepath.Join(d.home, "avd", "Pixel.avd")
+	avd := filepath.Join(d.home, "avd", "Avdslim_Test_Pixel.avd")
 	snap := filepath.Join(avd, "snapshots", "avdslim_clean")
 	if err := os.MkdirAll(snap, 0755); err != nil {
 		t.Fatal(err)
@@ -159,7 +159,7 @@ func TestUnbakeHonorsAndroidAvdHome(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, _ := d.run("unbake", "Pixel")
+	out, _ := d.run("unbake", "Avdslim_Test_Pixel")
 	mustContain(t, out, "Removed Golden Snapshot")
 	if _, err := os.Stat(snap); err == nil {
 		t.Error("snapshot still there")
@@ -422,22 +422,22 @@ func (d *device) withEmulator(avd string) {
 
 func TestStartLaunchesAndSlims(t *testing.T) {
 	d := newDevice(t, false)
-	d.withEmulator("Pixel")
+	d.withEmulator("Avdslim_Test_Pixel")
 
-	out, ok := d.run("start", "pixel") // any case, like on macOS
+	out, ok := d.run("start", "avdslim_test_pixel") // any case, like on macOS
 	if !ok {
 		t.Fatalf("start failed:\n%s", out)
 	}
 	mustContain(t, out, "Boot complete", "Slimming complete")
-	mustContain(t, d.read("emulator_calls"), "-avd Pixel ", "-lowram", "-memory 1536", "-no-snapshot-load")
+	mustContain(t, d.read("emulator_calls"), "-avd Avdslim_Test_Pixel ", "-lowram", "-memory 1536", "-no-snapshot-load")
 }
 
 func TestStartReportsEmulatorCrash(t *testing.T) {
 	d := newDevice(t, false)
-	d.withEmulator("Pixel")
+	d.withEmulator("Avdslim_Test_Pixel")
 	d.write("emulator_crash", "")
 
-	out, ok := d.run("start", "Pixel")
+	out, ok := d.run("start", "Avdslim_Test_Pixel")
 	if ok {
 		t.Fatalf("start succeeded although the emulator crashed:\n%s", out)
 	}
@@ -446,7 +446,7 @@ func TestStartReportsEmulatorCrash(t *testing.T) {
 
 func TestStartRejectsUnknownAvd(t *testing.T) {
 	d := newDevice(t, false)
-	d.withEmulator("Pixel")
+	d.withEmulator("Avdslim_Test_Pixel")
 	out, ok := d.run("start", "Nope")
 	if ok {
 		t.Fatalf("start succeeded for an unknown AVD:\n%s", out)
@@ -457,9 +457,9 @@ func TestStartRejectsUnknownAvd(t *testing.T) {
 	}
 }
 
-// oldSnapshot gives Pixel a previous Golden Snapshot and returns its marker path.
+// oldSnapshot gives Avdslim_Test_Pixel a previous Golden Snapshot and returns its marker path.
 func (d *device) oldSnapshot() string {
-	snap := filepath.Join(d.home, "avd", "Pixel.avd", "snapshots", "avdslim_clean")
+	snap := filepath.Join(d.home, "avd", "Avdslim_Test_Pixel.avd", "snapshots", "avdslim_clean")
 	if err := os.MkdirAll(snap, 0755); err != nil {
 		d.t.Fatal(err)
 	}
@@ -472,10 +472,10 @@ func (d *device) oldSnapshot() string {
 
 func TestBakeReplacesSnapshot(t *testing.T) {
 	d := newDevice(t, false)
-	d.withEmulator("Pixel")
+	d.withEmulator("Avdslim_Test_Pixel")
 	marker := d.oldSnapshot()
 
-	out, ok := d.run("bake", "Pixel")
+	out, ok := d.run("bake", "Avdslim_Test_Pixel")
 	if !ok {
 		t.Fatalf("bake failed:\n%s", out)
 	}
@@ -496,11 +496,11 @@ func TestBakeFailureKeepsPreviousSnapshot(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := newDevice(t, false)
-			d.withEmulator("Pixel")
+			d.withEmulator("Avdslim_Test_Pixel")
 			marker := d.oldSnapshot()
 			d.write(tc.failSwitch, "")
 
-			out, ok := d.run("bake", "Pixel")
+			out, ok := d.run("bake", "Avdslim_Test_Pixel")
 			if ok {
 				t.Fatalf("bake succeeded:\n%s", out)
 			}
@@ -510,6 +510,22 @@ func TestBakeFailureKeepsPreviousSnapshot(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A guest whose framework crash-loops (the Android 16 bluetooth bug) still
+// reports boot_completed; doctor and on must name it and point at repair.
+func TestCrashLoopingGuestPointsAtRepair(t *testing.T) {
+	d := newDevice(t, true)
+	d.write("pm_broken", "")
+
+	out, _ := d.run("doctor")
+	mustContain(t, out, "Package manager not running", "avdslim repair")
+
+	out, ok := d.run("on")
+	if ok {
+		t.Fatalf("on succeeded on a crash-looping guest:\n%s", out)
+	}
+	mustContain(t, out, "avdslim repair")
 }
 
 func TestRepair(t *testing.T) {
@@ -530,8 +546,8 @@ func TestRepair(t *testing.T) {
 
 func TestRestartPurgesAndRelaunches(t *testing.T) {
 	d := newDevice(t, true)
-	d.withEmulator("Slim_Pixel_5")
-	avd := filepath.Join(d.home, "avd", "Slim_Pixel_5.avd")
+	d.withEmulator("Avdslim_Test_Avd")
+	avd := filepath.Join(d.home, "avd", "Avdslim_Test_Avd.avd")
 	if err := os.MkdirAll(filepath.Join(avd, "snapshots", "avdslim_clean"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -543,13 +559,13 @@ func TestRestartPurgesAndRelaunches(t *testing.T) {
 	if !ok {
 		t.Fatalf("restart failed:\n%s", out)
 	}
-	mustContain(t, out, "Purged stale", "avdslim bake Slim_Pixel_5", "Slimming complete")
+	mustContain(t, out, "Purged stale", "avdslim bake Avdslim_Test_Avd", "Slimming complete")
 	for _, purged := range []string{"snapshots", "hardware-qemu.ini"} {
 		if _, err := os.Stat(filepath.Join(avd, purged)); err == nil {
 			t.Errorf("%s not purged", purged)
 		}
 	}
-	if !strings.Contains(d.read("emulator_calls"), "-avd Slim_Pixel_5") {
+	if !strings.Contains(d.read("emulator_calls"), "-avd Avdslim_Test_Avd") {
 		t.Error("emulator not relaunched")
 	}
 }

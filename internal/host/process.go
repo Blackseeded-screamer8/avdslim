@@ -26,38 +26,51 @@ func FindHostPidForSerial(serial string) int {
 	}
 
 	// 2. Fallback to process inspection
-	cmd := exec.Command("ps", "-eo", "pid,command")
-	out, err := cmd.CombinedOutput()
+	out, err := exec.Command("ps", "-eo", "pid,command").CombinedOutput()
 	if err != nil {
 		return 0
 	}
+	return pickQemuPid(string(out), portStr, os.Getpid())
+}
 
-	myPid := os.Getpid()
-	lines := strings.Split(string(out), "\n")
-	var candidates []int
-
-	for _, l := range lines {
-		if strings.Contains(l, "avdslim") || strings.Contains(l, "crashpad") || strings.Contains(l, "netsimd") {
+// pickQemuPid finds the qemu-system process for console port in `ps -eo
+// pid,command` output. A qemu started with a different -port is another
+// emulator and never matches; one without -port (e.g. a Studio launch) is
+// used only when it is the only candidate, so a stopped emulator is never
+// mistaken for a still-running neighbour.
+func pickQemuPid(psOut, port string, myPid int) int {
+	var portless []int
+	for _, l := range strings.Split(psOut, "\n") {
+		if !strings.Contains(l, "qemu-system") ||
+			strings.Contains(l, "avdslim") || strings.Contains(l, "crashpad") || strings.Contains(l, "netsimd") {
 			continue
 		}
-
-		if strings.Contains(l, "qemu-system") {
-			fields := strings.Fields(l)
-			if len(fields) > 0 {
-				if pid, err := strconv.Atoi(fields[0]); err == nil && pid != myPid {
-					if strings.Contains(l, "-port "+portStr) || strings.Contains(l, portStr) {
-						return pid
-					}
-					candidates = append(candidates, pid)
-				}
-			}
+		fields := strings.Fields(l)
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil || pid == myPid {
+			continue
+		}
+		switch p := portArg(fields); {
+		case p == port:
+			return pid
+		case p == "":
+			portless = append(portless, pid)
 		}
 	}
-
-	if len(candidates) > 0 {
-		return candidates[0]
+	if len(portless) == 1 {
+		return portless[0]
 	}
 	return 0
+}
+
+// portArg returns the value after -port in a command line, or "".
+func portArg(fields []string) string {
+	for i := 0; i+1 < len(fields); i++ {
+		if fields[i] == "-port" {
+			return fields[i+1]
+		}
+	}
+	return ""
 }
 
 func GetHostRssMb(pid int) int {

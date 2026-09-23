@@ -64,6 +64,8 @@ case "$1 $2" in
   "pm list")
     [ -f "$D/pm_broken" ] && { echo "cmd: Can't find service: package"; exit 1; }
     if [ -f "$D/packages" ]; then sed 's/^/package:/' "$D/packages"; else echo "package:android"; fi ;;
+  "service check")
+    if [ -f "$D/pm_broken" ]; then echo "Service $3: not found"; else echo "Service $3: found"; fi ;;
   "pm enable")
     grep -qx "$3" "$D/enable_fails" 2>/dev/null && { echo "Error: Unknown package: $3"; exit 1; }
     echo "Package $3 new state: enabled" ;;
