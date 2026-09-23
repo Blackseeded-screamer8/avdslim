@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.0.14 — 2026-09-23
 
 ### Added
 - **`avdslim create <name>`**: creates a new AVD from the newest installed "Google APIs" 4 KB image for the host CPU (Play Store and 16 KB page-size images are never picked), via `avdmanager`, then tunes it like `tune-avd`. Options: `--api=<level>`, `--device=<id>` (default `pixel_5`), `--ram`/`--heap`/`--gpu`. Refuses to overwrite an existing AVD. It never installs images or accepts licenses; with no suitable image it prints the `sdkmanager` command to run. Finds `avdmanager` on PATH or in the SDK's `cmdline-tools/latest` or versioned (`cmdline-tools/23.0`) directory.
@@ -22,6 +22,7 @@
 - **Headline numbers**: the README banner compared two different metrics (82%). Like-for-like in Activity Monitor it is 8.5 GB → 2.5 GB (71%).
 
 ### Changed
+- **Windows builds**: releases now include `avdslim_<ver>_windows_amd64.zip` and `_windows_arm64.zip` (`avdslim.exe`). `install-shim` remains unavailable on Windows.
 - `release.yml` runs gofmt, vet and the tests (with `-race`) before publishing; the Action runs the installer from its own ref instead of `main`.
 
 ## v1.0.13 — 2026-09-21

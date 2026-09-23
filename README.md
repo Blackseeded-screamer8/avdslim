@@ -132,6 +132,7 @@ Download pre-compiled binaries from [GitHub Releases](https://github.com/kdbhala
 * macOS Apple Silicon: `avdslim_*_darwin_arm64.tar.gz`
 * macOS Intel: `avdslim_*_darwin_amd64.tar.gz`
 * Linux: `avdslim_*_linux_amd64.tar.gz` / `avdslim_*_linux_arm64.tar.gz`
+* Windows: `avdslim_*_windows_amd64.zip` / `avdslim_*_windows_arm64.zip` (unzip and put `avdslim.exe` on your `PATH`; `install-shim` is not available on Windows)
 
 ### Option 5: Build from Source (100% Stdlib, Zero Dependencies)
 ```bash

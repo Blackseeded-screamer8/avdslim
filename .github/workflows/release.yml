@@ -49,36 +49,47 @@ jobs:
             "darwin/amd64"
             "linux/amd64"
             "linux/arm64"
+            "windows/amd64"
+            "windows/arm64"
           )
-          
+
           for PLATFORM in "${PLATFORMS[@]}"; do
             GOOS=${PLATFORM%/*}
             GOARCH=${PLATFORM#*/}
             OUTPUT_NAME="avdslim_${VERSION}_${GOOS}_${GOARCH}"
             DIR="dist/${OUTPUT_NAME}"
             mkdir -p "${DIR}"
-            
+            BIN="avdslim"
+            if [ "${GOOS}" = "windows" ]; then BIN="avdslim.exe"; fi
+
             echo "Building for ${GOOS}/${GOARCH}..."
-            CGO_ENABLED=0 GOOS=${GOOS} GOARCH=${GOARCH} go build -ldflags="-s -w -X main.version=${VERSION}" -o "${DIR}/avdslim" ./cmd/avdslim
+            CGO_ENABLED=0 GOOS=${GOOS} GOARCH=${GOARCH} go build -ldflags="-s -w -X main.version=${VERSION}" -o "${DIR}/${BIN}" ./cmd/avdslim
             cp README.md LICENSE "${DIR}/"
-            
-            tar -czvf "dist/${OUTPUT_NAME}.tar.gz" -C "dist" "${OUTPUT_NAME}"
+
+            if [ "${GOOS}" = "windows" ]; then
+              (cd dist && zip -qr "${OUTPUT_NAME}.zip" "${OUTPUT_NAME}")
+            else
+              tar -czvf "dist/${OUTPUT_NAME}.tar.gz" -C "dist" "${OUTPUT_NAME}"
+            fi
           done
-          
+
           cd dist
-          shasum -a 256 *.tar.gz > checksums.txt
+          shasum -a 256 *.tar.gz *.zip > checksums.txt
           cat checksums.txt
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: 'dist/*.tar.gz'
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.tar.gz
+            dist/*.zip
             dist/checksums.txt
           body_path: dist/release_notes.md
           generate_release_notes: true
