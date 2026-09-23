@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -993,24 +994,33 @@ func handleLaunch(client *adb.Client, args []string) {
 	// An emulator that fails (bad image, locked AVD) exits within seconds.
 	select {
 	case err := <-emu.exited:
-		reportEmulatorExit(err, emu.logPath)
+		fmt.Printf("❌ The emulator exited during startup (%v). Last lines of %s:\n%s\n", err, emu.logPath, logTail(emu.logPath))
+		os.Exit(1)
 	case <-time.After(3 * time.Second):
 	}
 
 	if doSlim {
 		fmt.Println("⏳ Waiting for emulator to finish booting...")
-		if emu.waitForBoot(client, serial, 60) {
+		err := emu.waitForBoot(client, serial, 60)
+		switch {
+		case err == nil:
 			if hasGolden && !forceCold {
 				fmt.Println("✓ Instant boot complete via Golden Snapshot! Refreshing slim state...")
 			} else {
 				fmt.Println("✓ Boot complete! Applying avdslim optimizations...")
 			}
 			handleOn(client, append(slimArgs, serial))
-		} else {
-			fmt.Println("⚠️  Boot timed out after 120s. You can run `avdslim on` manually.")
+		case errors.Is(err, errEmulatorExited):
+			fmt.Printf("❌ %v\n", err)
+			os.Exit(1)
+		default:
+			// Still booting, just slowly: leave it running.
+			fmt.Printf("⚠️  Boot %v. You can run `avdslim on` manually once it is up.\n", err)
 		}
 	}
 }
+
+var errEmulatorExited = errors.New("the emulator exited during startup")
 
 // runningEmulator is an emulator avdslim spawned, with its output in logPath.
 type runningEmulator struct {
@@ -1042,21 +1052,35 @@ func spawnEmulator(emulator string, args []string) *runningEmulator {
 	return e
 }
 
-// waitForBoot polls sys.boot_completed every 2 s, up to tries times. If the
-// emulator exits meanwhile, it reports why and exits 1.
-func (e *runningEmulator) waitForBoot(client *adb.Client, serial string, tries int) bool {
-	for i := 0; i < tries; i++ {
-		select {
-		case err := <-e.exited:
-			reportEmulatorExit(err, e.logPath)
-		default:
+// waitForBoot waits (every 2 s) up to 180 s for adb to see serial, then up to
+// tries more polls for sys.boot_completed. It returns an error, with the end
+// of the emulator's log, if the emulator exits meanwhile or time runs out.
+// Unlike `adb wait-for-device`, it cannot hang on an emulator that died.
+func (e *runningEmulator) waitForBoot(client *adb.Client, serial string, tries int) error {
+	poll := func(n int, ready func() bool) error {
+		for i := 0; i < n; i++ {
+			select {
+			case err := <-e.exited:
+				return fmt.Errorf("%w (%v). Last lines of %s:\n%s", errEmulatorExited, err, e.logPath, logTail(e.logPath))
+			default:
+			}
+			if ready() {
+				return nil
+			}
+			time.Sleep(2 * time.Second)
 		}
-		if res, _ := client.Exec("-s", serial, "shell", "getprop", "sys.boot_completed"); strings.TrimSpace(res) == "1" {
-			return true
-		}
-		time.Sleep(2 * time.Second)
+		return fmt.Errorf("timed out (emulator log: %s)", e.logPath)
 	}
-	return false
+	if err := poll(90, func() bool {
+		s, _ := client.Exec("-s", serial, "get-state")
+		return strings.TrimSpace(s) == "device"
+	}); err != nil {
+		return err
+	}
+	return poll(tries, func() bool {
+		res, _ := client.Exec("-s", serial, "shell", "getprop", "sys.boot_completed")
+		return strings.TrimSpace(res) == "1"
+	})
 }
 
 // waitStopped waits up to 10 s for serial's emulator process to go away.
@@ -1081,19 +1105,14 @@ func installedAvdName(installed []map[string]string, name string) (string, bool)
 	return "", false
 }
 
-// reportEmulatorExit explains an emulator that quit during startup, with the
-// end of its log, and exits 1.
-func reportEmulatorExit(err error, logPath string) {
-	fmt.Printf("❌ The emulator exited during startup (%v). Last lines of %s:\n", err, logPath)
+// logTail returns the last 15 lines of the emulator log, indented.
+func logTail(logPath string) string {
 	data, _ := os.ReadFile(logPath)
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	if len(lines) > 15 {
 		lines = lines[len(lines)-15:]
 	}
-	for _, l := range lines {
-		fmt.Println("   " + l)
-	}
-	os.Exit(1)
+	return "   " + strings.Join(lines, "\n   ")
 }
 
 func handleStop(client *adb.Client, args []string) {
@@ -1585,8 +1604,8 @@ func handleBake(client *adb.Client, args []string) {
 	}
 
 	fmt.Println("⏳ Waiting for boot completion...")
-	if !emu.waitForBoot(client, targetSerial, 90) {
-		abort("Timed out waiting for emulator boot.")
+	if err := emu.waitForBoot(client, targetSerial, 90); err != nil {
+		abort(fmt.Sprintf("Boot failed: %v.", err))
 	}
 
 	fmt.Printf("✓ Boot complete on %s! Settling system daemons (4s)...\n", targetSerial)

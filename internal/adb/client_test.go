@@ -155,6 +155,23 @@ func TestSlimAbortsWhenStateUnwritable(t *testing.T) {
 	}
 }
 
+// A setting value with a single quote must survive the shell round trip, or
+// the state write breaks and `on` refuses to run.
+func TestStateSurvivesQuoteInSetting(t *testing.T) {
+	c, dir := newFake(t)
+	write(t, dir, "global_activity_manager_constants", "max_phantom='3'")
+
+	if _, err := c.Slim("e", false, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Restore("e"); err != nil {
+		t.Fatal(err)
+	}
+	if got := setting(t, dir, "global", "activity_manager_constants"); got != "max_phantom='3'" {
+		t.Errorf("after restore = %q, want the quoted original", got)
+	}
+}
+
 func TestSlimFailsWhenPackagesUnlisted(t *testing.T) {
 	c, dir := newFake(t)
 	write(t, dir, "pm_broken", "")

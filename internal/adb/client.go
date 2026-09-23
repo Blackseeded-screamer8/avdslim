@@ -81,7 +81,10 @@ func (c *Client) writeState(serial string, state SlimState) error {
 	if err != nil {
 		return err
 	}
-	out, err := c.Exec("-s", serial, "shell", "echo", fmt.Sprintf("'%s'", string(stateJson)), ">", StateFilePath)
+	// adb joins the args into one remote shell line, so quote for that shell:
+	// a recorded setting value may contain a single quote.
+	quoted := "'" + strings.ReplaceAll(string(stateJson), "'", `'\''`) + "'"
+	out, err := c.Exec("-s", serial, "shell", "echo", quoted, ">", StateFilePath)
 	if err != nil {
 		return fmt.Errorf("cannot write %s: %s", StateFilePath, strings.TrimSpace(out))
 	}

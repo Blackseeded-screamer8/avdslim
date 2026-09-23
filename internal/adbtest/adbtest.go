@@ -45,6 +45,11 @@ if [ "$1" = "-s" ] && [ "$3" = "emu" ]; then
   esac
   exit 0
 fi
+if [ "$1" = "-s" ] && [ "$3" = "get-state" ]; then
+  grep -q "^$2[[:space:]]*device" "$D/devices" 2>/dev/null && { echo device; exit 0; }
+  echo "error: device '$2' not found" >&2
+  exit 1
+fi
 [ "$3" = "shell" ] || exit 0
 shift 3 # drop: -s SERIAL shell
 case "$1 $2" in
@@ -64,7 +69,7 @@ case "$1 $2" in
   "rm -f") rm -f "$D/state" ;;
   "echo "*)
     [ -f "$D/readonly" ] && { echo "/system/bin/sh: can't create $4: Read-only file system"; exit 1; }
-    v="$2"; v="${v#\'}"; printf '%s' "${v%\'}" > "$D/state" ;;
+    eval "printf '%s' $2" > "$D/state" ;; # parse the quoting like the device shell
 esac
 exit 0
 `
