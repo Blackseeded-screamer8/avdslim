@@ -1,26 +1,26 @@
 class Avdslim < Formula
   desc "Cut Android emulator (AVD) host RAM from ~8.5 GB to ~2.5 GB on Apple Silicon & Linux"
   homepage "https://github.com/kdbhalala/avdslim"
-  version "1.0.12"
+  version "1.0.14"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.12/avdslim_v1.0.12_darwin_arm64.tar.gz"
-      sha256 "0bf46f9e93c8373fd239f2990b311fe38cdbe0242932bba64c6dec0a84cdc3f1"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.14/avdslim_v1.0.14_darwin_arm64.tar.gz"
+      sha256 "5889056bd9ee2653d12ba5b8a5464051191cf6740ce5e464fe1138901d969498"
     else
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.12/avdslim_v1.0.12_darwin_amd64.tar.gz"
-      sha256 "50a61ba4d5baff9ce35f46ef28e6f962ef24ac2df144c95db945d8b94304fd31"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.14/avdslim_v1.0.14_darwin_amd64.tar.gz"
+      sha256 "9de331e2b0b44da7dc0957290847454a9f6e79ede33dc6f6ad626dd7d38ab910"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.12/avdslim_v1.0.12_linux_arm64.tar.gz"
-      sha256 "7aa82b0483d4bcca5fc6ab5155ba43f184611e9a825d5d81d304cc4128d78beb"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.14/avdslim_v1.0.14_linux_arm64.tar.gz"
+      sha256 "3e7de720ca37ed7ca6828f245776870ceb5827b27969b556cc6b634487bd42ba"
     else
-      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.12/avdslim_v1.0.12_linux_amd64.tar.gz"
-      sha256 "a9a78120adab7f25009a3ffa18e755eacaff7f51205f014561c87e72ca5172bc"
+      url "https://github.com/kdbhalala/avdslim/releases/download/v1.0.14/avdslim_v1.0.14_linux_amd64.tar.gz"
+      sha256 "158ed1ad10ebde5802855e31392185b69ad89fecb760f1de9fb141956b00faa6"
     end
   end
 
