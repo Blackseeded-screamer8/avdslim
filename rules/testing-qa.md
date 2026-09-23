@@ -37,7 +37,7 @@
   `adbtest.go`). `start`/`bake` use the fake `emulator` in `main_test.go`
   (`emulator_crash` simulates a startup death); the shim is tested in
   `internal/shim/shim_test.go` against a temp SDK and by running the
-  generated script. Still not covered: `restart`/`bench`/`watch`/`repair`
+  generated script. Still not covered: `bench`, `watch` (infinite loop)
   and host memory probes (`lsof`/`ps`/`footprint`).
 - New failure handling gets a test that fails without the fix (RED first).
   Keep new pure logic (package-list filtering, arg parsing, ini editing,
