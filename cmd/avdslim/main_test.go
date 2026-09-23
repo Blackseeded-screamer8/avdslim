@@ -512,6 +512,48 @@ func TestBakeFailureKeepsPreviousSnapshot(t *testing.T) {
 	}
 }
 
+func TestRepair(t *testing.T) {
+	d := newDevice(t, true)
+	out, ok := d.run("repair")
+	if !ok {
+		t.Fatalf("repair failed:\n%s", out)
+	}
+	mustContain(t, out, "Nothing to repair")
+
+	d.write("root_denied", "")
+	out, ok = d.run("repair")
+	if ok {
+		t.Fatalf("repair succeeded without adb root:\n%s", out)
+	}
+	mustContain(t, out, "adb root not permitted")
+}
+
+func TestRestartPurgesAndRelaunches(t *testing.T) {
+	d := newDevice(t, true)
+	d.withEmulator("Slim_Pixel_5")
+	avd := filepath.Join(d.home, "avd", "Slim_Pixel_5.avd")
+	if err := os.MkdirAll(filepath.Join(avd, "snapshots", "avdslim_clean"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(avd, "hardware-qemu.ini"), []byte("stale"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, ok := d.run("restart")
+	if !ok {
+		t.Fatalf("restart failed:\n%s", out)
+	}
+	mustContain(t, out, "Purged stale", "avdslim bake Slim_Pixel_5", "Slimming complete")
+	for _, purged := range []string{"snapshots", "hardware-qemu.ini"} {
+		if _, err := os.Stat(filepath.Join(avd, purged)); err == nil {
+			t.Errorf("%s not purged", purged)
+		}
+	}
+	if !strings.Contains(d.read("emulator_calls"), "-avd Slim_Pixel_5") {
+		t.Error("emulator not relaunched")
+	}
+}
+
 func TestUnknownCommand(t *testing.T) {
 	d := newDevice(t, false)
 	out, ok := d.run("frobnicate")

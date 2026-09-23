@@ -23,6 +23,7 @@ import (
 //	enable_fails        packages (one per line) that `pm enable` rejects
 //	readonly            writing the state file fails
 //	snapshot_fails      `emu avd snapshot save` answers KO
+//	root_denied         `adb root` refuses (Play Store image)
 //
 // `emu avd snapshot save NAME` creates $ANDROID_AVD_HOME/<avd>.avd/snapshots/NAME
 // with a "marker" file reading "new-snapshot"; `emu kill` clears `devices`.
@@ -43,6 +44,10 @@ if [ "$1" = "-s" ] && [ "$3" = "emu" ]; then
     "kill "*) rm -f "$D/devices"; echo OK ;;
     *) echo "$name" ;;
   esac
+  exit 0
+fi
+if [ "$1" = "-s" ] && [ "$3" = "root" ]; then
+  [ -f "$D/root_denied" ] && echo "adbd cannot run as root in production builds"
   exit 0
 fi
 if [ "$1" = "-s" ] && [ "$3" = "get-state" ]; then
